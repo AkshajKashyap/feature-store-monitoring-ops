@@ -56,3 +56,47 @@ Generated rows include:
 pytest -q
 ruff check .
 ```
+
+## Milestone 2: Offline Feature Engineering
+
+This milestone builds the offline feature layer from synthetic events. It uses deterministic chronological train/validation/test splits for temporal data.
+
+### Build Offline Features
+
+```bash
+feature-store-ops generate-synthetic-events
+feature-store-ops build-offline-features
+```
+
+The offline builder reads:
+
+- `data/processed/synthetic_events.csv`
+
+It writes:
+
+- `data/processed/offline_features.parquet`
+- `data/processed/train_features.parquet`
+- `data/processed/validation_features.parquet`
+- `data/processed/test_features.parquet`
+- `reports/offline_feature_summary.md`
+
+Offline feature columns include:
+
+- `zone_id`
+- `hour`
+- `day_of_week`
+- `is_weekend`
+- `lag_1_observed_demand`
+- `lag_3_observed_demand`
+- `rolling_mean_3`
+- `rolling_mean_6`
+- `rolling_std_6`
+- `zone_hour_mean_demand`
+- `target_next_observed_demand`
+
+Leakage rules:
+
+- Lags and rolling features are grouped by `zone_id` and shifted before aggregation.
+- `zone_hour_mean_demand` uses only prior rows for the same zone and hour.
+- `target_next_observed_demand` is the next future observed demand for the same zone.
+- Splits are chronological, never random.

@@ -8,9 +8,15 @@ from typing import Annotated
 import typer
 
 from feature_store_monitoring_ops import __version__
+from feature_store_monitoring_ops.features.offline import build_and_save_offline_features
 from feature_store_monitoring_ops.paths import (
+    DEFAULT_OFFLINE_FEATURE_REPORT_PATH,
+    DEFAULT_OFFLINE_FEATURES_PATH,
     DEFAULT_SYNTHETIC_EVENTS_PATH,
     DEFAULT_SYNTHETIC_REPORT_PATH,
+    DEFAULT_TEST_FEATURES_PATH,
+    DEFAULT_TRAIN_FEATURES_PATH,
+    DEFAULT_VALIDATION_FEATURES_PATH,
     PROJECT_ROOT,
 )
 from feature_store_monitoring_ops.synthetic_events import (
@@ -57,6 +63,11 @@ def project_info() -> None:
     typer.echo(f"project_root: {PROJECT_ROOT}")
     typer.echo(f"synthetic_events_path: {DEFAULT_SYNTHETIC_EVENTS_PATH}")
     typer.echo(f"synthetic_report_path: {DEFAULT_SYNTHETIC_REPORT_PATH}")
+    typer.echo(f"offline_features_path: {DEFAULT_OFFLINE_FEATURES_PATH}")
+    typer.echo(f"train_features_path: {DEFAULT_TRAIN_FEATURES_PATH}")
+    typer.echo(f"validation_features_path: {DEFAULT_VALIDATION_FEATURES_PATH}")
+    typer.echo(f"test_features_path: {DEFAULT_TEST_FEATURES_PATH}")
+    typer.echo(f"offline_feature_report_path: {DEFAULT_OFFLINE_FEATURE_REPORT_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -115,6 +126,67 @@ def generate_synthetic_events_command(
 
     typer.echo(f"wrote {result.rows_written} synthetic events to {result.csv_path}")
     typer.echo(f"wrote summary report to {result.report_path}")
+
+
+@app.command("build-offline-features")
+def build_offline_features_command(
+    input_path: Annotated[
+        Path,
+        typer.Option("--input-path", help="CSV path for synthetic events."),
+    ] = DEFAULT_SYNTHETIC_EVENTS_PATH,
+    output_path: Annotated[
+        Path,
+        typer.Option("--output-path", help="Parquet path for all offline feature rows."),
+    ] = DEFAULT_OFFLINE_FEATURES_PATH,
+    train_path: Annotated[
+        Path,
+        typer.Option("--train-path", help="Parquet path for train feature rows."),
+    ] = DEFAULT_TRAIN_FEATURES_PATH,
+    validation_path: Annotated[
+        Path,
+        typer.Option("--validation-path", help="Parquet path for validation feature rows."),
+    ] = DEFAULT_VALIDATION_FEATURES_PATH,
+    test_path: Annotated[
+        Path,
+        typer.Option("--test-path", help="Parquet path for test feature rows."),
+    ] = DEFAULT_TEST_FEATURES_PATH,
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Markdown offline feature summary path."),
+    ] = DEFAULT_OFFLINE_FEATURE_REPORT_PATH,
+    train_fraction: Annotated[
+        float,
+        typer.Option("--train-fraction", help="Chronological fraction assigned to train."),
+    ] = 0.70,
+    validation_fraction: Annotated[
+        float,
+        typer.Option(
+            "--validation-fraction",
+            help="Chronological fraction assigned to validation.",
+        ),
+    ] = 0.15,
+) -> None:
+    """Build deterministic offline temporal features and chronological splits."""
+
+    try:
+        result = build_and_save_offline_features(
+            input_path=input_path,
+            offline_features_path=output_path,
+            train_features_path=train_path,
+            validation_features_path=validation_path,
+            test_features_path=test_path,
+            report_path=report_path,
+            train_fraction=train_fraction,
+            validation_fraction=validation_fraction,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"wrote {result.row_counts['offline']} offline feature rows to {output_path}")
+    typer.echo(f"wrote {result.row_counts['train']} train rows to {train_path}")
+    typer.echo(f"wrote {result.row_counts['validation']} validation rows to {validation_path}")
+    typer.echo(f"wrote {result.row_counts['test']} test rows to {test_path}")
+    typer.echo(f"wrote summary report to {report_path}")
 
 
 __all__ = ["app"]

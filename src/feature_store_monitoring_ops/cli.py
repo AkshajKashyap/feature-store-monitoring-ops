@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -10,6 +11,7 @@ import typer
 from feature_store_monitoring_ops import __version__
 from feature_store_monitoring_ops.api.app import (
     create_app as create_api_app,
+    run_api_traffic_simulation,
     run_api_smoke_test,
     write_api_serving_report,
 )
@@ -17,6 +19,15 @@ from feature_store_monitoring_ops.api.service import ServingArtifacts
 from feature_store_monitoring_ops.features.offline import build_and_save_offline_features
 from feature_store_monitoring_ops.features.online import materialize_online_features
 from feature_store_monitoring_ops.models.training import train_and_evaluate_models
+from feature_store_monitoring_ops.monitoring.serving import (
+    ServingMonitoringThresholds,
+    monitor_prediction_logs,
+)
+from feature_store_monitoring_ops.monitoring.telemetry import (
+    IncrementingClock,
+    PredictionTelemetryLogger,
+    reset_prediction_log,
+)
 from feature_store_monitoring_ops.paths import (
     DEFAULT_API_SERVING_REPORT_PATH,
     DEFAULT_MODEL_MANIFEST_PATH,
@@ -27,7 +38,10 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_ONLINE_FEATURE_MANIFEST_PATH,
     DEFAULT_ONLINE_FEATURE_REPORT_PATH,
     DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
+    DEFAULT_PREDICTION_LOG_PATH,
     DEFAULT_SELECTED_MODEL_PATH,
+    DEFAULT_SERVING_MONITORING_METRICS_PATH,
+    DEFAULT_SERVING_MONITORING_REPORT_PATH,
     DEFAULT_SYNTHETIC_EVENTS_PATH,
     DEFAULT_SYNTHETIC_REPORT_PATH,
     DEFAULT_TEST_FEATURES_PATH,
@@ -92,6 +106,9 @@ def project_info() -> None:
     typer.echo(f"online_feature_manifest_path: {DEFAULT_ONLINE_FEATURE_MANIFEST_PATH}")
     typer.echo(f"online_feature_report_path: {DEFAULT_ONLINE_FEATURE_REPORT_PATH}")
     typer.echo(f"api_serving_report_path: {DEFAULT_API_SERVING_REPORT_PATH}")
+    typer.echo(f"prediction_log_path: {DEFAULT_PREDICTION_LOG_PATH}")
+    typer.echo(f"serving_monitoring_report_path: {DEFAULT_SERVING_MONITORING_REPORT_PATH}")
+    typer.echo(f"serving_monitoring_metrics_path: {DEFAULT_SERVING_MONITORING_METRICS_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -332,6 +349,10 @@ def serve_api_command(
         Path,
         typer.Option("--report-path", help="Tracked Markdown API serving report path."),
     ] = DEFAULT_API_SERVING_REPORT_PATH,
+    telemetry_log_path: Annotated[
+        Path,
+        typer.Option("--telemetry-log-path", help="JSONL prediction telemetry log path."),
+    ] = DEFAULT_PREDICTION_LOG_PATH,
     host: Annotated[
         str,
         typer.Option("--host", help="Host for local Uvicorn serving."),
@@ -353,7 +374,7 @@ def serve_api_command(
         feature_snapshot_path=feature_snapshot_path,
         feature_manifest_path=feature_manifest_path,
     )
-    api_app = create_api_app(artifacts=artifacts)
+    api_app = create_api_app(artifacts=artifacts, telemetry_log_path=telemetry_log_path)
 
     if smoke_test:
         try:
@@ -373,6 +394,126 @@ def serve_api_command(
     import uvicorn
 
     uvicorn.run(api_app, host=host, port=port)
+
+
+@app.command("simulate-traffic")
+def simulate_traffic_command(
+    model_path: Annotated[
+        Path,
+        typer.Option("--model-path", help="Joblib path for the selected model artifact."),
+    ] = DEFAULT_SELECTED_MODEL_PATH,
+    model_manifest_path: Annotated[
+        Path,
+        typer.Option("--model-manifest-path", help="JSON path for selected model manifest."),
+    ] = DEFAULT_MODEL_MANIFEST_PATH,
+    feature_snapshot_path: Annotated[
+        Path,
+        typer.Option("--feature-snapshot-path", help="JSON path for online feature snapshot."),
+    ] = DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
+    feature_manifest_path: Annotated[
+        Path,
+        typer.Option("--feature-manifest-path", help="JSON path for online feature manifest."),
+    ] = DEFAULT_ONLINE_FEATURE_MANIFEST_PATH,
+    telemetry_log_path: Annotated[
+        Path,
+        typer.Option("--telemetry-log-path", help="JSONL prediction telemetry log path."),
+    ] = DEFAULT_PREDICTION_LOG_PATH,
+    base_timestamp: Annotated[
+        str,
+        typer.Option("--base-timestamp", help="ISO timestamp for deterministic simulated logs."),
+    ] = "2026-02-01T00:00:00+00:00",
+    unknown_zone_id: Annotated[
+        str,
+        typer.Option("--unknown-zone-id", help="Unknown zone used to generate an error log."),
+    ] = "unknown_zone",
+    reset_log: Annotated[
+        bool,
+        typer.Option("--reset-log/--append-log", help="Reset telemetry log before simulation."),
+    ] = True,
+) -> None:
+    """Generate deterministic local prediction telemetry with in-process API calls."""
+
+    if reset_log:
+        reset_prediction_log(telemetry_log_path)
+    artifacts = ServingArtifacts(
+        model_path=model_path,
+        model_manifest_path=model_manifest_path,
+        feature_snapshot_path=feature_snapshot_path,
+        feature_manifest_path=feature_manifest_path,
+    )
+    logger = PredictionTelemetryLogger(
+        log_path=telemetry_log_path,
+        now_fn=IncrementingClock(_parse_cli_timestamp(base_timestamp)),
+    )
+    api_app = create_api_app(artifacts=artifacts, telemetry_logger=logger)
+    try:
+        result = run_api_traffic_simulation(api_app, unknown_zone_id=unknown_zone_id)
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"simulated {result.total_requests} prediction requests")
+    typer.echo(f"successful requests: {result.successful_requests}")
+    typer.echo(f"failed requests: {result.failed_requests}")
+    typer.echo(f"wrote telemetry to {result.log_path}")
+
+
+@app.command("monitor-serving")
+def monitor_serving_command(
+    telemetry_log_path: Annotated[
+        Path,
+        typer.Option("--telemetry-log-path", help="JSONL prediction telemetry log path."),
+    ] = DEFAULT_PREDICTION_LOG_PATH,
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown serving monitoring report path."),
+    ] = DEFAULT_SERVING_MONITORING_REPORT_PATH,
+    metrics_path: Annotated[
+        Path,
+        typer.Option("--metrics-path", help="Tracked JSON serving monitoring metrics path."),
+    ] = DEFAULT_SERVING_MONITORING_METRICS_PATH,
+    error_rate_threshold: Annotated[
+        float,
+        typer.Option("--error-rate-threshold", help="Warning threshold for serving error rate."),
+    ] = 0.10,
+    p95_latency_threshold_ms: Annotated[
+        float,
+        typer.Option("--p95-latency-threshold-ms", help="Warning threshold for p95 latency."),
+    ] = 250.0,
+    freshness_threshold_seconds: Annotated[
+        float,
+        typer.Option("--freshness-threshold-seconds", help="Warning threshold for stale features."),
+    ] = 172800.0,
+    min_prediction_count: Annotated[
+        int,
+        typer.Option("--min-prediction-count", help="Warning threshold for small samples."),
+    ] = 10,
+) -> None:
+    """Build an offline serving monitoring report from prediction telemetry logs."""
+
+    thresholds = ServingMonitoringThresholds(
+        error_rate=error_rate_threshold,
+        p95_latency_ms=p95_latency_threshold_ms,
+        freshness_seconds=freshness_threshold_seconds,
+        min_prediction_count=min_prediction_count,
+    )
+    result = monitor_prediction_logs(
+        log_path=telemetry_log_path,
+        report_path=report_path,
+        metrics_path=metrics_path,
+        thresholds=thresholds,
+    )
+    typer.echo(f"monitored {result.metrics['total_requests']} prediction requests")
+    typer.echo(f"error rate: {result.metrics['error_rate']:.6f}")
+    typer.echo(f"warnings: {len(result.warnings)}")
+    typer.echo(f"wrote serving monitoring report to {result.report_path}")
+    typer.echo(f"wrote serving monitoring metrics to {result.metrics_path}")
+
+
+def _parse_cli_timestamp(value: str) -> datetime:
+    timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if timestamp.tzinfo is None:
+        return timestamp.replace(tzinfo=UTC)
+    return timestamp
 
 
 __all__ = ["app"]

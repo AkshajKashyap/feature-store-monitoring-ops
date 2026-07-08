@@ -237,3 +237,52 @@ Local metrics:
 The API smoke test writes:
 
 - `reports/api_serving_summary.md`
+
+## Milestone 6: Prediction Telemetry And Serving Monitoring
+
+This milestone adds durable local JSONL telemetry for prediction requests plus an offline monitoring report over those logs. It still stays local and does not require Redis, Postgres, Docker, or cloud services.
+
+### Simulate Traffic And Monitor Serving
+
+```bash
+feature-store-ops generate-synthetic-events
+feature-store-ops build-offline-features
+feature-store-ops train-model
+feature-store-ops materialize-online-features
+feature-store-ops serve-api --smoke-test
+feature-store-ops simulate-traffic
+feature-store-ops monitor-serving
+```
+
+Prediction telemetry is written to ignored local logs:
+
+- `logs/predictions.jsonl`
+
+Each JSONL row includes:
+
+- `request_id`
+- `timestamp`
+- `zone_id`
+- `as_of_timestamp`
+- `prediction`
+- `model_name`
+- `model_version`
+- `feature_freshness_seconds`
+- `latency_ms`
+- `status`
+- `error_type`
+
+The traffic simulator calls the API in-process for known zones and one unknown zone, producing both success and error telemetry.
+
+Monitoring reads:
+
+- `logs/predictions.jsonl`
+
+It writes tracked reports:
+
+- `reports/serving_monitoring_summary.md`
+- `reports/serving_monitoring_metrics.json`
+
+Serving monitoring metrics include total requests, successful and failed predictions, error rate, average and p95 latency, prediction summary statistics, request count by zone, and stale feature count.
+
+Warnings are emitted when error rate, p95 latency, stale feature count, or small prediction sample size crosses configured thresholds.

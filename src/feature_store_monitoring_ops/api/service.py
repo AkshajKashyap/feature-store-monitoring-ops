@@ -146,11 +146,17 @@ def extract_model_features(row: dict[str, object]) -> dict[str, object]:
     return {column: row[column] for column in get_model_input_columns()}
 
 
-def build_feature_freshness(context: ServingContext, row: dict[str, object]) -> dict[str, object]:
+def build_feature_freshness(
+    context: ServingContext,
+    row: dict[str, object],
+    *,
+    feature_freshness_seconds: float | None = None,
+) -> dict[str, object]:
     """Build deterministic feature freshness metadata for prediction responses."""
 
     return {
         "as_of_timestamp": row[AS_OF_TIMESTAMP_COLUMN],
+        "feature_freshness_seconds": feature_freshness_seconds,
         "online_snapshot_row_count": context.feature_manifest.get("row_count"),
         "source_artifact_path": context.feature_manifest.get("source_artifact_path"),
     }

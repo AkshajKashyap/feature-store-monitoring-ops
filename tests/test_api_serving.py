@@ -19,6 +19,7 @@ from feature_store_monitoring_ops.features.contract import (
 )
 from feature_store_monitoring_ops.features.online import build_online_feature_manifest
 from feature_store_monitoring_ops.models.training import ColumnBaselineRegressor
+from feature_store_monitoring_ops.monitoring.telemetry import PredictionTelemetryLogger
 
 
 def test_health_endpoint(tmp_path) -> None:
@@ -95,6 +96,7 @@ def test_metrics_update_after_prediction(tmp_path) -> None:
 def test_serve_api_cli_smoke_behavior(tmp_path) -> None:
     artifacts = _write_serving_artifacts(tmp_path)
     report_path = tmp_path / "api_serving_summary.md"
+    telemetry_log_path = tmp_path / "predictions.jsonl"
     runner = CliRunner()
 
     result = runner.invoke(
@@ -112,6 +114,8 @@ def test_serve_api_cli_smoke_behavior(tmp_path) -> None:
             str(artifacts.feature_manifest_path),
             "--report-path",
             str(report_path),
+            "--telemetry-log-path",
+            str(telemetry_log_path),
         ],
     )
 
@@ -144,7 +148,8 @@ class InProcessTestClient:
 
 def _client_with_artifacts(tmp_path: Path) -> InProcessTestClient:
     artifacts = _write_serving_artifacts(tmp_path)
-    return InProcessTestClient(create_app(artifacts=artifacts))
+    telemetry_logger = PredictionTelemetryLogger(log_path=tmp_path / "predictions.jsonl")
+    return InProcessTestClient(create_app(artifacts=artifacts, telemetry_logger=telemetry_logger))
 
 
 def _write_serving_artifacts(tmp_path: Path) -> ServingArtifacts:

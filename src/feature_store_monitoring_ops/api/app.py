@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import time
+from collections.abc import Callable
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request
 import httpx
@@ -32,17 +35,36 @@ from feature_store_monitoring_ops.features.contract import (
     TARGET_COLUMN,
     get_model_input_columns,
 )
-from feature_store_monitoring_ops.paths import DEFAULT_API_SERVING_REPORT_PATH
+from feature_store_monitoring_ops.monitoring.telemetry import (
+    PredictionTelemetryLogger,
+    TelemetrySimulationResult,
+    utc_now,
+)
+from feature_store_monitoring_ops.paths import (
+    DEFAULT_API_SERVING_REPORT_PATH,
+    DEFAULT_PREDICTION_LOG_PATH,
+)
 
 
-def create_app(artifacts: ServingArtifacts | None = None) -> FastAPI:
+def create_app(
+    artifacts: ServingArtifacts | None = None,
+    *,
+    telemetry_logger: PredictionTelemetryLogger | None = None,
+    telemetry_log_path: Path = DEFAULT_PREDICTION_LOG_PATH,
+    telemetry_now_fn: Callable[[], datetime] | None = None,
+) -> FastAPI:
     """Create the local FastAPI prediction app."""
 
     serving_context = load_serving_context(artifacts)
     metrics = ApiMetrics()
+    telemetry = telemetry_logger or PredictionTelemetryLogger(
+        log_path=telemetry_log_path,
+        now_fn=telemetry_now_fn or utc_now,
+    )
     app = FastAPI(title="Feature Store Monitoring Ops API", version="0.1.0")
     app.state.serving_context = serving_context
     app.state.metrics = metrics
+    app.state.telemetry = telemetry
 
     @app.middleware("http")
     async def metrics_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -98,7 +120,18 @@ def create_app(artifacts: ServingArtifacts | None = None) -> FastAPI:
     @app.post("/predict", response_model=PredictionResponse)
     async def predict(request: PredictRequest) -> PredictionResponse:
         context = _get_context(app)
+        telemetry = _get_telemetry(app)
+        request_id = telemetry.next_request_id()
+        request_start = time.perf_counter()
         if not context.is_ready:
+            telemetry.log_error(
+                request_id=request_id,
+                zone_id=request.zone_id,
+                model_name=context.selected_model,
+                model_version=context.model_version,
+                latency_ms=_elapsed_ms(request_start),
+                error_type="not_ready",
+            )
             raise HTTPException(
                 status_code=503,
                 detail="serving artifacts are not ready: " + "; ".join(context.load_errors),
@@ -106,20 +139,57 @@ def create_app(artifacts: ServingArtifacts | None = None) -> FastAPI:
         try:
             prediction, row, latency_ms = predict_for_zone(context, request.zone_id)
         except RuntimeError as exc:
+            telemetry.log_error(
+                request_id=request_id,
+                zone_id=request.zone_id,
+                model_name=context.selected_model,
+                model_version=context.model_version,
+                latency_ms=_elapsed_ms(request_start),
+                error_type="serving_error",
+            )
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except KeyError as exc:
+            telemetry.log_error(
+                request_id=request_id,
+                zone_id=request.zone_id,
+                model_name=context.selected_model,
+                model_version=context.model_version,
+                latency_ms=_elapsed_ms(request_start),
+                error_type="unknown_zone",
+            )
             raise HTTPException(status_code=404, detail=str(exc).strip("'")) from exc
         except ValueError as exc:
+            telemetry.log_error(
+                request_id=request_id,
+                zone_id=request.zone_id,
+                model_name=context.selected_model,
+                model_version=context.model_version,
+                latency_ms=_elapsed_ms(request_start),
+                error_type="feature_error",
+            )
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
         _get_metrics(app).record_prediction(latency_ms)
+        telemetry_row = telemetry.log_success(
+            request_id=request_id,
+            zone_id=str(row["zone_id"]),
+            as_of_timestamp=str(row[AS_OF_TIMESTAMP_COLUMN]),
+            prediction=prediction,
+            model_name=context.selected_model,
+            model_version=context.model_version,
+            latency_ms=latency_ms,
+        )
         return PredictionResponse(
             zone_id=str(row["zone_id"]),
             prediction=prediction,
             as_of_timestamp=str(row[AS_OF_TIMESTAMP_COLUMN]),
             model_name=context.selected_model,
             model_version=context.model_version,
-            feature_freshness=build_feature_freshness(context, row),
+            feature_freshness=build_feature_freshness(
+                context,
+                row,
+                feature_freshness_seconds=telemetry_row["feature_freshness_seconds"],
+            ),
             feature_columns=list(get_model_input_columns()),
         )
 
@@ -134,6 +204,16 @@ def run_api_smoke_test(app: FastAPI) -> dict[str, object]:
     """Run an in-process API smoke test without opening a network socket."""
 
     return asyncio.run(_run_api_smoke_test_async(app))
+
+
+def run_api_traffic_simulation(
+    app: FastAPI,
+    *,
+    unknown_zone_id: str = "unknown_zone",
+) -> TelemetrySimulationResult:
+    """Run deterministic in-process prediction traffic against known zones plus one unknown zone."""
+
+    return asyncio.run(_run_api_traffic_simulation_async(app, unknown_zone_id=unknown_zone_id))
 
 
 def write_api_serving_report(
@@ -163,6 +243,10 @@ def _get_context(app: FastAPI) -> ServingContext:
 
 def _get_metrics(app: FastAPI) -> ApiMetrics:
     return app.state.metrics
+
+
+def _get_telemetry(app: FastAPI) -> PredictionTelemetryLogger:
+    return app.state.telemetry
 
 
 async def _run_api_smoke_test_async(app: FastAPI) -> dict[str, object]:
@@ -203,13 +287,50 @@ async def _run_api_smoke_test_async(app: FastAPI) -> dict[str, object]:
         }
 
 
+async def _run_api_traffic_simulation_async(
+    app: FastAPI,
+    *,
+    unknown_zone_id: str,
+) -> TelemetrySimulationResult:
+    context = _get_context(app)
+    if not context.is_ready:
+        raise RuntimeError(f"API is not ready: {context.load_errors}")
+    assert context.feature_store is not None
+    known_zones = sorted(str(row["zone_id"]) for row in context.feature_store.all_rows())
+    zones = [*known_zones, unknown_zone_id]
+    successful_requests = 0
+    failed_requests = 0
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        for zone_id in zones:
+            response = await client.post("/predict", json={"zone_id": zone_id})
+            if response.status_code < 400:
+                successful_requests += 1
+            else:
+                failed_requests += 1
+
+    return TelemetrySimulationResult(
+        log_path=_get_telemetry(app).log_path,
+        total_requests=len(zones),
+        successful_requests=successful_requests,
+        failed_requests=failed_requests,
+        zones_requested=zones,
+    )
+
+
 def _assert_success(status_code: int, endpoint: str) -> None:
     if status_code >= 400:
         raise RuntimeError(f"smoke test request failed for {endpoint}: HTTP {status_code}")
 
 
+def _elapsed_ms(start: float) -> float:
+    return (time.perf_counter() - start) * 1000
+
+
 __all__ = [
     "create_app",
+    "run_api_traffic_simulation",
     "run_api_smoke_test",
     "write_api_serving_report",
 ]

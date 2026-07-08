@@ -1,0 +1,32 @@
+[project]
+name = "feature-store-monitoring-ops"
+version = "0.1.0"
+description = "Production-style ML feature store and monitoring system."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "duckdb",
+    "pyarrow",
+    "redis",
+    "sqlalchemy",
+    "psycopg2-binary",
+    "pydantic",
+    "typer",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -8,10 +8,17 @@ from typing import Annotated
 import typer
 
 from feature_store_monitoring_ops import __version__
+from feature_store_monitoring_ops.api.app import (
+    create_app as create_api_app,
+    run_api_smoke_test,
+    write_api_serving_report,
+)
+from feature_store_monitoring_ops.api.service import ServingArtifacts
 from feature_store_monitoring_ops.features.offline import build_and_save_offline_features
 from feature_store_monitoring_ops.features.online import materialize_online_features
 from feature_store_monitoring_ops.models.training import train_and_evaluate_models
 from feature_store_monitoring_ops.paths import (
+    DEFAULT_API_SERVING_REPORT_PATH,
     DEFAULT_MODEL_MANIFEST_PATH,
     DEFAULT_MODEL_METRICS_PATH,
     DEFAULT_MODEL_TRAINING_REPORT_PATH,
@@ -84,6 +91,7 @@ def project_info() -> None:
     typer.echo(f"online_feature_snapshot_path: {DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH}")
     typer.echo(f"online_feature_manifest_path: {DEFAULT_ONLINE_FEATURE_MANIFEST_PATH}")
     typer.echo(f"online_feature_report_path: {DEFAULT_ONLINE_FEATURE_REPORT_PATH}")
+    typer.echo(f"api_serving_report_path: {DEFAULT_API_SERVING_REPORT_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -300,6 +308,71 @@ def materialize_online_features_command(
     typer.echo(f"wrote {result.row_count} online feature rows to {result.snapshot_path}")
     typer.echo(f"wrote online feature manifest to {result.manifest_path}")
     typer.echo(f"wrote summary report to {result.report_path}")
+
+
+@app.command("serve-api")
+def serve_api_command(
+    model_path: Annotated[
+        Path,
+        typer.Option("--model-path", help="Joblib path for the selected model artifact."),
+    ] = DEFAULT_SELECTED_MODEL_PATH,
+    model_manifest_path: Annotated[
+        Path,
+        typer.Option("--model-manifest-path", help="JSON path for selected model manifest."),
+    ] = DEFAULT_MODEL_MANIFEST_PATH,
+    feature_snapshot_path: Annotated[
+        Path,
+        typer.Option("--feature-snapshot-path", help="JSON path for online feature snapshot."),
+    ] = DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
+    feature_manifest_path: Annotated[
+        Path,
+        typer.Option("--feature-manifest-path", help="JSON path for online feature manifest."),
+    ] = DEFAULT_ONLINE_FEATURE_MANIFEST_PATH,
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown API serving report path."),
+    ] = DEFAULT_API_SERVING_REPORT_PATH,
+    host: Annotated[
+        str,
+        typer.Option("--host", help="Host for local Uvicorn serving."),
+    ] = "127.0.0.1",
+    port: Annotated[
+        int,
+        typer.Option("--port", help="Port for local Uvicorn serving."),
+    ] = 8000,
+    smoke_test: Annotated[
+        bool,
+        typer.Option("--smoke-test", help="Run an in-process API smoke test and exit."),
+    ] = False,
+) -> None:
+    """Serve the local FastAPI prediction API."""
+
+    artifacts = ServingArtifacts(
+        model_path=model_path,
+        model_manifest_path=model_manifest_path,
+        feature_snapshot_path=feature_snapshot_path,
+        feature_manifest_path=feature_manifest_path,
+    )
+    api_app = create_api_app(artifacts=artifacts)
+
+    if smoke_test:
+        try:
+            result = run_api_smoke_test(api_app)
+        except RuntimeError as exc:
+            write_api_serving_report(api_app, report_path=report_path, smoke_test_passed=False)
+            raise typer.BadParameter(str(exc)) from exc
+        write_api_serving_report(api_app, report_path=report_path, smoke_test_passed=True)
+        typer.echo("api smoke test passed")
+        typer.echo(f"smoke test zone_id: {result['zone_id']}")
+        typer.echo(f"smoke test prediction: {result['prediction']}")
+        typer.echo(f"wrote summary report to {report_path}")
+        return
+
+    write_api_serving_report(api_app, report_path=report_path, smoke_test_passed=None)
+    typer.echo(f"serving API on http://{host}:{port}")
+    import uvicorn
+
+    uvicorn.run(api_app, host=host, port=port)
 
 
 __all__ = ["app"]

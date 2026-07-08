@@ -184,3 +184,56 @@ Parity rules:
 - Online rows contain exactly model input features plus entity/as-of metadata.
 - Online values are validated against the corresponding latest offline rows.
 - The manifest records row count, feature columns, entity keys, as-of column, and source artifact path.
+
+## Milestone 5: Local FastAPI Prediction Service
+
+This milestone adds a local FastAPI serving layer that loads the selected model and online feature snapshot. It stays local and does not require Redis, Postgres, Docker, or a network server for tests.
+
+### Serve Or Smoke Test The API
+
+```bash
+feature-store-ops generate-synthetic-events
+feature-store-ops build-offline-features
+feature-store-ops train-model
+feature-store-ops materialize-online-features
+feature-store-ops serve-api --smoke-test
+```
+
+To run a local server:
+
+```bash
+feature-store-ops serve-api --host 127.0.0.1 --port 8000
+```
+
+The API loads:
+
+- `artifacts/models/selected_model.joblib`
+- `artifacts/models/model_manifest.json`
+- `artifacts/online_features/latest_features.json`
+- `artifacts/online_features/manifest.json`
+
+Endpoints:
+
+- `GET /health`
+- `GET /model`
+- `GET /features/{zone_id}`
+- `POST /predict`
+- `GET /metrics`
+
+Prediction behavior:
+
+- `POST /predict` accepts a `zone_id`.
+- The API retrieves the latest online feature row for that zone.
+- The selected model receives exactly the shared model input feature columns.
+- Responses include prediction, model metadata, as-of timestamp, and feature freshness metadata.
+
+Local metrics:
+
+- Request count
+- Prediction count
+- Error count
+- Average prediction latency in milliseconds
+
+The API smoke test writes:
+
+- `reports/api_serving_summary.md`

@@ -1,0 +1,225 @@
+"""Deterministic synthetic temporal demand event generation."""
+
+from __future__ import annotations
+
+import csv
+import math
+import random
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from feature_store_monitoring_ops.paths import (
+    DEFAULT_SYNTHETIC_EVENTS_PATH,
+    DEFAULT_SYNTHETIC_REPORT_PATH,
+)
+from feature_store_monitoring_ops.schema import (
+    REQUIRED_SYNTHETIC_EVENT_COLUMNS,
+    ensure_valid_synthetic_event_rows,
+    parse_event_timestamp,
+)
+
+DEFAULT_START_TIMESTAMP = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
+
+
+@dataclass(frozen=True)
+class SyntheticEventConfig:
+    """Configuration for deterministic synthetic temporal demand events."""
+
+    num_events: int = 720
+    seed: int = 42
+    start_timestamp: datetime = field(default_factory=lambda: DEFAULT_START_TIMESTAMP)
+    interval_minutes: int = 60
+    zone_count: int = 5
+    user_count: int = 200
+
+    def validate(self) -> None:
+        """Validate config values before event generation."""
+
+        if self.num_events <= 0:
+            raise ValueError("num_events must be greater than zero")
+        if self.interval_minutes <= 0:
+            raise ValueError("interval_minutes must be greater than zero")
+        if self.zone_count <= 0:
+            raise ValueError("zone_count must be greater than zero")
+        if self.user_count <= 0:
+            raise ValueError("user_count must be greater than zero")
+
+
+@dataclass(frozen=True)
+class SyntheticGenerationResult:
+    """Output paths and row count from generating synthetic events."""
+
+    csv_path: Path
+    report_path: Path
+    rows_written: int
+
+
+def generate_synthetic_events(
+    config: SyntheticEventConfig | None = None,
+) -> list[dict[str, object]]:
+    """Generate deterministic temporal demand events for local development."""
+
+    active_config = config or SyntheticEventConfig()
+    active_config.validate()
+    rng = random.Random(active_config.seed)
+
+    rows: list[dict[str, object]] = []
+    for event_index in range(active_config.num_events):
+        timestamp = active_config.start_timestamp + timedelta(
+            minutes=active_config.interval_minutes * event_index,
+        )
+        hour = timestamp.hour
+        day_of_week = timestamp.weekday()
+        is_weekend = day_of_week >= 5
+        zone_number = rng.randint(1, active_config.zone_count)
+        user_number = rng.randint(1, active_config.user_count)
+
+        base_demand = _base_temporal_demand(
+            event_index=event_index,
+            total_events=active_config.num_events,
+            hour=hour,
+            day_of_week=day_of_week,
+            zone_number=zone_number,
+        )
+        observed_demand = max(0.0, base_demand + rng.gauss(0.0, max(1.0, base_demand * 0.08)))
+        demand_count = max(0, int(round(observed_demand)))
+
+        rows.append(
+            {
+                "event_id": f"evt_{event_index + 1:06d}",
+                "timestamp": timestamp.isoformat(),
+                "zone_id": f"zone_{zone_number:02d}",
+                "user_id": f"user_{user_number:04d}",
+                "demand_count": demand_count,
+                "hour": hour,
+                "day_of_week": day_of_week,
+                "is_weekend": is_weekend,
+                "base_demand": round(base_demand, 3),
+                "observed_demand": round(observed_demand, 3),
+            },
+        )
+
+    ensure_valid_synthetic_event_rows(rows)
+    return rows
+
+
+def generate_and_save_synthetic_events(
+    config: SyntheticEventConfig | None = None,
+    *,
+    output_path: Path = DEFAULT_SYNTHETIC_EVENTS_PATH,
+    report_path: Path = DEFAULT_SYNTHETIC_REPORT_PATH,
+) -> SyntheticGenerationResult:
+    """Generate synthetic events and write the CSV plus Markdown summary."""
+
+    rows = generate_synthetic_events(config=config)
+    write_synthetic_events_csv(rows=rows, output_path=output_path)
+    write_synthetic_events_summary(rows=rows, report_path=report_path)
+    return SyntheticGenerationResult(
+        csv_path=output_path,
+        report_path=report_path,
+        rows_written=len(rows),
+    )
+
+
+def write_synthetic_events_csv(
+    rows: Sequence[Mapping[str, object]],
+    output_path: Path,
+) -> None:
+    """Write validated synthetic event rows to CSV."""
+
+    ensure_valid_synthetic_event_rows(rows)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=REQUIRED_SYNTHETIC_EVENT_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def write_synthetic_events_summary(
+    rows: Sequence[Mapping[str, object]],
+    report_path: Path,
+) -> None:
+    """Write a small Markdown summary for generated synthetic events."""
+
+    ensure_valid_synthetic_event_rows(rows)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(build_synthetic_events_summary(rows), encoding="utf-8")
+
+
+def build_synthetic_events_summary(rows: Sequence[Mapping[str, object]]) -> str:
+    """Build a compact Markdown report for generated synthetic events."""
+
+    ensure_valid_synthetic_event_rows(rows)
+    timestamps = [parse_event_timestamp(row["timestamp"]) for row in rows]
+    zones = sorted({str(row["zone_id"]) for row in rows})
+    users = sorted({str(row["user_id"]) for row in rows})
+    total_demand = sum(int(row["demand_count"]) for row in rows)
+    average_demand = total_demand / len(rows)
+    average_observed_demand = sum(float(row["observed_demand"]) for row in rows) / len(rows)
+
+    return "\n".join(
+        [
+            "# Synthetic Events Summary",
+            "",
+            "Generated deterministic temporal demand events for Milestone 1.",
+            "",
+            f"- Rows: {len(rows)}",
+            f"- Timestamp range: {min(timestamps).isoformat()} to {max(timestamps).isoformat()}",
+            f"- Zones: {len(zones)} ({', '.join(zones)})",
+            f"- Unique users sampled: {len(users)}",
+            f"- Total demand_count: {total_demand}",
+            f"- Average demand_count: {average_demand:.2f}",
+            f"- Average observed_demand: {average_observed_demand:.2f}",
+            "",
+        ],
+    )
+
+
+def parse_start_timestamp(value: str) -> datetime:
+    """Parse a CLI timestamp and attach UTC when no timezone is supplied."""
+
+    timestamp = parse_event_timestamp(value)
+    if timestamp.tzinfo is None:
+        return timestamp.replace(tzinfo=UTC)
+    return timestamp
+
+
+def _base_temporal_demand(
+    *,
+    event_index: int,
+    total_events: int,
+    hour: int,
+    day_of_week: int,
+    zone_number: int,
+) -> float:
+    morning_peak = math.exp(-((hour - 8) ** 2) / 18)
+    evening_peak = math.exp(-((hour - 17) ** 2) / 14)
+    daily_wave = 0.8 * math.sin((2 * math.pi * hour) / 24)
+    weekend_multiplier = 0.78 if day_of_week >= 5 else 1.0
+    weekday_multiplier = 1.1 if day_of_week in {1, 2, 3} else 1.0
+    zone_multiplier = 0.85 + (zone_number * 0.08)
+    trend_multiplier = 1.0 + (event_index / max(total_events - 1, 1)) * 0.1
+
+    demand = (
+        10.0
+        + (18.0 * morning_peak)
+        + (24.0 * evening_peak)
+        + daily_wave
+        + (day_of_week * 0.7)
+    )
+    return max(0.0, demand * weekend_multiplier * weekday_multiplier * zone_multiplier * trend_multiplier)
+
+
+__all__ = [
+    "DEFAULT_START_TIMESTAMP",
+    "SyntheticEventConfig",
+    "SyntheticGenerationResult",
+    "build_synthetic_events_summary",
+    "generate_and_save_synthetic_events",
+    "generate_synthetic_events",
+    "parse_start_timestamp",
+    "write_synthetic_events_csv",
+    "write_synthetic_events_summary",
+]

@@ -1,0 +1,41 @@
+{
+  "selected_model": "hist_gradient_boosting",
+  "selection_metric": "mae",
+  "test_metrics": {
+    "mae": 6.29841,
+    "mean_prediction": 31.162596,
+    "mean_target": 31.920733,
+    "r2": 0.313692,
+    "rmse": 7.948043
+  },
+  "validation_metrics": {
+    "hist_gradient_boosting": {
+      "mae": 5.660108,
+      "mean_prediction": 25.523123,
+      "mean_target": 25.216438,
+      "r2": 0.23992,
+      "rmse": 7.193382
+    },
+    "naive_lag_1": {
+      "mae": 9.902112,
+      "mean_prediction": 26.224955,
+      "mean_target": 25.216438,
+      "r2": -1.137513,
+      "rmse": 12.063071
+    },
+    "ridge_regression": {
+      "mae": 6.370028,
+      "mean_prediction": 26.007366,
+      "mean_target": 25.216438,
+      "r2": 0.123936,
+      "rmse": 7.72274
+    },
+    "zone_hour_mean": {
+      "mae": 8.555436,
+      "mean_prediction": 27.303594,
+      "mean_target": 25.216438,
+      "r2": -0.769971,
+      "rmse": 10.977073
+    }
+  }
+}

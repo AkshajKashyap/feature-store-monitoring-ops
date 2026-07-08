@@ -8,8 +8,10 @@ version = "0.1.0"
 description = "Production-style ML feature store and monitoring system."
 requires-python = ">=3.11"
 dependencies = [
+    "joblib",
     "pandas",
     "pyarrow",
+    "scikit-learn",
     "typer",
 ]
 

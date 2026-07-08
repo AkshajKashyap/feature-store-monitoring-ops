@@ -100,3 +100,47 @@ Leakage rules:
 - `zone_hour_mean_demand` uses only prior rows for the same zone and hour.
 - `target_next_observed_demand` is the next future observed demand for the same zone.
 - Splits are chronological, never random.
+
+## Milestone 3: Baseline Model Training
+
+This milestone trains simple demand forecasting models on the offline train split, selects a model with validation metrics, and evaluates the selected model once on the test split.
+
+### Train A Model
+
+```bash
+feature-store-ops generate-synthetic-events
+feature-store-ops build-offline-features
+feature-store-ops train-model
+```
+
+The trainer reads:
+
+- `data/processed/train_features.parquet`
+- `data/processed/validation_features.parquet`
+- `data/processed/test_features.parquet`
+
+It writes ignored model artifacts:
+
+- `artifacts/models/selected_model.joblib`
+- `artifacts/models/model_manifest.json`
+
+It writes tracked reports:
+
+- `reports/model_training_summary.md`
+- `reports/model_metrics.json`
+
+Candidate models:
+
+- `naive_lag_1`
+- `zone_hour_mean`
+- `ridge_regression`
+- `hist_gradient_boosting`
+
+Metrics include MAE, RMSE, R2, mean prediction, and mean target.
+
+Leakage rules:
+
+- Candidate models train on the train split only.
+- Validation metrics select the model.
+- Test metrics are computed only once after model selection.
+- `target_next_observed_demand` is never included as an input feature.

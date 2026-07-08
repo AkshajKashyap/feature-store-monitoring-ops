@@ -9,9 +9,14 @@ import typer
 
 from feature_store_monitoring_ops import __version__
 from feature_store_monitoring_ops.features.offline import build_and_save_offline_features
+from feature_store_monitoring_ops.models.training import train_and_evaluate_models
 from feature_store_monitoring_ops.paths import (
+    DEFAULT_MODEL_MANIFEST_PATH,
+    DEFAULT_MODEL_METRICS_PATH,
+    DEFAULT_MODEL_TRAINING_REPORT_PATH,
     DEFAULT_OFFLINE_FEATURE_REPORT_PATH,
     DEFAULT_OFFLINE_FEATURES_PATH,
+    DEFAULT_SELECTED_MODEL_PATH,
     DEFAULT_SYNTHETIC_EVENTS_PATH,
     DEFAULT_SYNTHETIC_REPORT_PATH,
     DEFAULT_TEST_FEATURES_PATH,
@@ -68,6 +73,10 @@ def project_info() -> None:
     typer.echo(f"validation_features_path: {DEFAULT_VALIDATION_FEATURES_PATH}")
     typer.echo(f"test_features_path: {DEFAULT_TEST_FEATURES_PATH}")
     typer.echo(f"offline_feature_report_path: {DEFAULT_OFFLINE_FEATURE_REPORT_PATH}")
+    typer.echo(f"selected_model_path: {DEFAULT_SELECTED_MODEL_PATH}")
+    typer.echo(f"model_manifest_path: {DEFAULT_MODEL_MANIFEST_PATH}")
+    typer.echo(f"model_training_report_path: {DEFAULT_MODEL_TRAINING_REPORT_PATH}")
+    typer.echo(f"model_metrics_path: {DEFAULT_MODEL_METRICS_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -187,6 +196,67 @@ def build_offline_features_command(
     typer.echo(f"wrote {result.row_counts['validation']} validation rows to {validation_path}")
     typer.echo(f"wrote {result.row_counts['test']} test rows to {test_path}")
     typer.echo(f"wrote summary report to {report_path}")
+
+
+@app.command("train-model")
+def train_model_command(
+    train_path: Annotated[
+        Path,
+        typer.Option("--train-path", help="Parquet path for train feature rows."),
+    ] = DEFAULT_TRAIN_FEATURES_PATH,
+    validation_path: Annotated[
+        Path,
+        typer.Option("--validation-path", help="Parquet path for validation feature rows."),
+    ] = DEFAULT_VALIDATION_FEATURES_PATH,
+    test_path: Annotated[
+        Path,
+        typer.Option("--test-path", help="Parquet path for test feature rows."),
+    ] = DEFAULT_TEST_FEATURES_PATH,
+    model_path: Annotated[
+        Path,
+        typer.Option("--model-path", help="Joblib path for the selected model artifact."),
+    ] = DEFAULT_SELECTED_MODEL_PATH,
+    manifest_path: Annotated[
+        Path,
+        typer.Option("--manifest-path", help="JSON path for the selected model manifest."),
+    ] = DEFAULT_MODEL_MANIFEST_PATH,
+    metrics_path: Annotated[
+        Path,
+        typer.Option("--metrics-path", help="Tracked JSON path for model metrics."),
+    ] = DEFAULT_MODEL_METRICS_PATH,
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown model training summary path."),
+    ] = DEFAULT_MODEL_TRAINING_REPORT_PATH,
+    random_state: Annotated[
+        int,
+        typer.Option("--random-state", help="Random state for deterministic sklearn models."),
+    ] = 42,
+) -> None:
+    """Train baseline demand models and evaluate the validation-selected model."""
+
+    try:
+        result = train_and_evaluate_models(
+            train_path=train_path,
+            validation_path=validation_path,
+            test_path=test_path,
+            model_path=model_path,
+            manifest_path=manifest_path,
+            metrics_path=metrics_path,
+            report_path=report_path,
+            random_state=random_state,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"selected model: {result.selected_model_name}")
+    typer.echo(f"test mae: {result.test_metrics['mae']:.6f}")
+    typer.echo(f"test rmse: {result.test_metrics['rmse']:.6f}")
+    typer.echo(f"test r2: {result.test_metrics['r2']:.6f}")
+    typer.echo(f"wrote selected model to {result.model_path}")
+    typer.echo(f"wrote model manifest to {result.manifest_path}")
+    typer.echo(f"wrote metrics to {result.metrics_path}")
+    typer.echo(f"wrote summary report to {result.report_path}")
 
 
 __all__ = ["app"]

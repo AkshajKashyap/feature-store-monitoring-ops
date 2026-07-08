@@ -1,9 +1,19 @@
 """Feature engineering utilities."""
 
+from feature_store_monitoring_ops.features.contract import (
+    AS_OF_TIMESTAMP_COLUMN,
+    ENTITY_KEY_COLUMNS,
+    MODEL_INPUT_FEATURE_COLUMNS,
+    OFFLINE_METADATA_COLUMNS,
+    ONLINE_FEATURE_COLUMNS,
+    ONLINE_METADATA_COLUMNS,
+    TARGET_COLUMN,
+    get_model_input_columns,
+    get_online_feature_columns,
+)
 from feature_store_monitoring_ops.features.offline import (
     OFFLINE_FEATURE_COLUMNS,
     REQUIRED_OFFLINE_FEATURE_COLUMNS,
-    TARGET_COLUMN,
     OfflineFeatureBuildResult,
     build_and_save_offline_features,
     build_offline_feature_summary,
@@ -12,16 +22,44 @@ from feature_store_monitoring_ops.features.offline import (
     read_synthetic_events,
     split_chronologically,
 )
+from feature_store_monitoring_ops.features.online import (
+    OnlineFeatureMaterializationResult,
+    build_online_feature_manifest,
+    build_online_feature_summary,
+    materialize_online_features,
+    online_features_to_records,
+    read_offline_features,
+    select_latest_online_features,
+    validate_online_feature_rows,
+    validate_online_offline_parity,
+)
 
 __all__ = [
+    "AS_OF_TIMESTAMP_COLUMN",
+    "ENTITY_KEY_COLUMNS",
+    "MODEL_INPUT_FEATURE_COLUMNS",
     "OFFLINE_FEATURE_COLUMNS",
+    "OFFLINE_METADATA_COLUMNS",
+    "ONLINE_FEATURE_COLUMNS",
+    "ONLINE_METADATA_COLUMNS",
     "REQUIRED_OFFLINE_FEATURE_COLUMNS",
     "TARGET_COLUMN",
     "OfflineFeatureBuildResult",
+    "OnlineFeatureMaterializationResult",
     "build_and_save_offline_features",
     "build_offline_feature_summary",
     "build_offline_features",
+    "build_online_feature_manifest",
+    "build_online_feature_summary",
+    "get_model_input_columns",
+    "get_online_feature_columns",
+    "materialize_online_features",
     "normalize_synthetic_events",
+    "online_features_to_records",
+    "read_offline_features",
     "read_synthetic_events",
+    "select_latest_online_features",
     "split_chronologically",
+    "validate_online_feature_rows",
+    "validate_online_offline_parity",
 ]

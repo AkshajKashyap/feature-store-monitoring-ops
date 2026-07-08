@@ -144,3 +144,43 @@ Leakage rules:
 - Validation metrics select the model.
 - Test metrics are computed only once after model selection.
 - `target_next_observed_demand` is never included as an input feature.
+
+## Milestone 4: Online Feature Materialization
+
+This milestone adds the first local feature-store layer. It materializes the latest offline feature row per entity and verifies offline/online feature parity without Redis, Postgres, FastAPI, or Docker.
+
+### Materialize Online Features
+
+```bash
+feature-store-ops generate-synthetic-events
+feature-store-ops build-offline-features
+feature-store-ops train-model
+feature-store-ops materialize-online-features
+```
+
+The materializer reads:
+
+- `data/processed/offline_features.parquet`
+
+It writes ignored local online artifacts:
+
+- `artifacts/online_features/latest_features.json`
+- `artifacts/online_features/manifest.json`
+
+It writes a tracked report:
+
+- `reports/online_feature_materialization_summary.md`
+
+Feature contract:
+
+- Entity key: `zone_id`
+- As-of timestamp: `timestamp`
+- Model input feature columns are shared by offline features, training, and online materialization.
+- `target_next_observed_demand` is excluded from online feature snapshots.
+
+Parity rules:
+
+- The latest valid offline feature row is selected per `zone_id`.
+- Online rows contain exactly model input features plus entity/as-of metadata.
+- Online values are validated against the corresponding latest offline rows.
+- The manifest records row count, feature columns, entity keys, as-of column, and source artifact path.

@@ -9,6 +9,7 @@ import typer
 
 from feature_store_monitoring_ops import __version__
 from feature_store_monitoring_ops.features.offline import build_and_save_offline_features
+from feature_store_monitoring_ops.features.online import materialize_online_features
 from feature_store_monitoring_ops.models.training import train_and_evaluate_models
 from feature_store_monitoring_ops.paths import (
     DEFAULT_MODEL_MANIFEST_PATH,
@@ -16,6 +17,9 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_MODEL_TRAINING_REPORT_PATH,
     DEFAULT_OFFLINE_FEATURE_REPORT_PATH,
     DEFAULT_OFFLINE_FEATURES_PATH,
+    DEFAULT_ONLINE_FEATURE_MANIFEST_PATH,
+    DEFAULT_ONLINE_FEATURE_REPORT_PATH,
+    DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
     DEFAULT_SELECTED_MODEL_PATH,
     DEFAULT_SYNTHETIC_EVENTS_PATH,
     DEFAULT_SYNTHETIC_REPORT_PATH,
@@ -77,6 +81,9 @@ def project_info() -> None:
     typer.echo(f"model_manifest_path: {DEFAULT_MODEL_MANIFEST_PATH}")
     typer.echo(f"model_training_report_path: {DEFAULT_MODEL_TRAINING_REPORT_PATH}")
     typer.echo(f"model_metrics_path: {DEFAULT_MODEL_METRICS_PATH}")
+    typer.echo(f"online_feature_snapshot_path: {DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH}")
+    typer.echo(f"online_feature_manifest_path: {DEFAULT_ONLINE_FEATURE_MANIFEST_PATH}")
+    typer.echo(f"online_feature_report_path: {DEFAULT_ONLINE_FEATURE_REPORT_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -256,6 +263,42 @@ def train_model_command(
     typer.echo(f"wrote selected model to {result.model_path}")
     typer.echo(f"wrote model manifest to {result.manifest_path}")
     typer.echo(f"wrote metrics to {result.metrics_path}")
+    typer.echo(f"wrote summary report to {result.report_path}")
+
+
+@app.command("materialize-online-features")
+def materialize_online_features_command(
+    source_path: Annotated[
+        Path,
+        typer.Option("--source-path", help="Parquet path for all offline feature rows."),
+    ] = DEFAULT_OFFLINE_FEATURES_PATH,
+    snapshot_path: Annotated[
+        Path,
+        typer.Option("--snapshot-path", help="JSON path for the latest online feature snapshot."),
+    ] = DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
+    manifest_path: Annotated[
+        Path,
+        typer.Option("--manifest-path", help="JSON path for online feature manifest metadata."),
+    ] = DEFAULT_ONLINE_FEATURE_MANIFEST_PATH,
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown online materialization report path."),
+    ] = DEFAULT_ONLINE_FEATURE_REPORT_PATH,
+) -> None:
+    """Materialize latest offline feature rows into a local online feature snapshot."""
+
+    try:
+        result = materialize_online_features(
+            source_path=source_path,
+            snapshot_path=snapshot_path,
+            manifest_path=manifest_path,
+            report_path=report_path,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"wrote {result.row_count} online feature rows to {result.snapshot_path}")
+    typer.echo(f"wrote online feature manifest to {result.manifest_path}")
     typer.echo(f"wrote summary report to {result.report_path}")
 
 

@@ -7,6 +7,12 @@ from pathlib import Path
 
 import pandas as pd
 
+from feature_store_monitoring_ops.features.contract import (
+    AS_OF_TIMESTAMP_COLUMN,
+    MODEL_INPUT_FEATURE_COLUMNS,
+    REQUIRED_OFFLINE_FEATURE_COLUMNS,
+    TARGET_COLUMN,
+)
 from feature_store_monitoring_ops.paths import (
     DEFAULT_OFFLINE_FEATURE_REPORT_PATH,
     DEFAULT_OFFLINE_FEATURES_PATH,
@@ -17,25 +23,7 @@ from feature_store_monitoring_ops.paths import (
 )
 from feature_store_monitoring_ops.schema import REQUIRED_SYNTHETIC_EVENT_COLUMNS
 
-TARGET_COLUMN = "target_next_observed_demand"
-OFFLINE_FEATURE_COLUMNS: tuple[str, ...] = (
-    "zone_id",
-    "hour",
-    "day_of_week",
-    "is_weekend",
-    "lag_1_observed_demand",
-    "lag_3_observed_demand",
-    "rolling_mean_3",
-    "rolling_mean_6",
-    "rolling_std_6",
-    "zone_hour_mean_demand",
-)
-REQUIRED_OFFLINE_FEATURE_COLUMNS: tuple[str, ...] = (
-    "event_id",
-    "timestamp",
-    *OFFLINE_FEATURE_COLUMNS,
-    TARGET_COLUMN,
-)
+OFFLINE_FEATURE_COLUMNS = MODEL_INPUT_FEATURE_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -67,19 +55,23 @@ def normalize_synthetic_events(events: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"synthetic events missing required columns: {', '.join(sorted(missing))}")
 
     normalized = events.copy()
-    normalized["timestamp"] = pd.to_datetime(normalized["timestamp"], utc=True, errors="raise")
+    normalized[AS_OF_TIMESTAMP_COLUMN] = pd.to_datetime(
+        normalized[AS_OF_TIMESTAMP_COLUMN],
+        utc=True,
+        errors="raise",
+    )
     normalized["event_id"] = normalized["event_id"].astype(str)
     normalized["zone_id"] = normalized["zone_id"].astype(str)
     normalized["user_id"] = normalized["user_id"].astype(str)
     normalized["demand_count"] = pd.to_numeric(normalized["demand_count"], errors="raise")
     normalized["base_demand"] = pd.to_numeric(normalized["base_demand"], errors="raise")
     normalized["observed_demand"] = pd.to_numeric(normalized["observed_demand"], errors="raise")
-    normalized["hour"] = normalized["timestamp"].dt.hour.astype("int64")
-    normalized["day_of_week"] = normalized["timestamp"].dt.dayofweek.astype("int64")
-    normalized["is_weekend"] = normalized["timestamp"].dt.dayofweek.ge(5)
+    normalized["hour"] = normalized[AS_OF_TIMESTAMP_COLUMN].dt.hour.astype("int64")
+    normalized["day_of_week"] = normalized[AS_OF_TIMESTAMP_COLUMN].dt.dayofweek.astype("int64")
+    normalized["is_weekend"] = normalized[AS_OF_TIMESTAMP_COLUMN].dt.dayofweek.ge(5)
 
     return normalized.sort_values(
-        ["timestamp", "zone_id", "event_id"],
+        [AS_OF_TIMESTAMP_COLUMN, "zone_id", "event_id"],
         kind="mergesort",
         ignore_index=True,
     )
@@ -134,7 +126,7 @@ def build_offline_features(events: pd.DataFrame) -> pd.DataFrame:
         subset=REQUIRED_OFFLINE_FEATURE_COLUMNS,
     )
     features = features.sort_values(
-        ["timestamp", "zone_id", "event_id"],
+        [AS_OF_TIMESTAMP_COLUMN, "zone_id", "event_id"],
         kind="mergesort",
         ignore_index=True,
     )
@@ -156,7 +148,7 @@ def split_chronologically(
         validation_fraction=validation_fraction,
     )
     ordered = features.sort_values(
-        ["timestamp", "zone_id", "event_id"],
+        [AS_OF_TIMESTAMP_COLUMN, "zone_id", "event_id"],
         kind="mergesort",
         ignore_index=True,
     )
@@ -307,7 +299,10 @@ def _write_parquet(frame: pd.DataFrame, path: Path) -> None:
 def _format_time_range(frame: pd.DataFrame) -> str:
     if frame.empty:
         return "empty"
-    return f"{frame['timestamp'].min().isoformat()} to {frame['timestamp'].max().isoformat()}"
+    return (
+        f"{frame[AS_OF_TIMESTAMP_COLUMN].min().isoformat()} to "
+        f"{frame[AS_OF_TIMESTAMP_COLUMN].max().isoformat()}"
+    )
 
 
 __all__ = [

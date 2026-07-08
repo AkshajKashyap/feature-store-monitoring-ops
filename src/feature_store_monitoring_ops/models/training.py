@@ -18,7 +18,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from feature_store_monitoring_ops.features.offline import OFFLINE_FEATURE_COLUMNS, TARGET_COLUMN
+from feature_store_monitoring_ops.features.contract import TARGET_COLUMN, get_model_input_columns
 from feature_store_monitoring_ops.paths import (
     DEFAULT_MODEL_MANIFEST_PATH,
     DEFAULT_MODEL_METRICS_PATH,
@@ -63,14 +63,6 @@ class ModelTrainingResult:
     report_path: Path
     input_features: tuple[str, ...]
     row_counts: dict[str, int]
-
-
-def get_model_input_columns() -> tuple[str, ...]:
-    """Return model input columns, explicitly excluding the target."""
-
-    if TARGET_COLUMN in OFFLINE_FEATURE_COLUMNS:
-        raise ValueError("target column must not be part of model input features")
-    return OFFLINE_FEATURE_COLUMNS
 
 
 def load_feature_splits(

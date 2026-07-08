@@ -14,11 +14,23 @@ DEFAULT_SELECTED_MODEL_PATH = PROJECT_ROOT / "artifacts" / "models" / "selected_
 DEFAULT_MODEL_MANIFEST_PATH = PROJECT_ROOT / "artifacts" / "models" / "model_manifest.json"
 DEFAULT_MODEL_TRAINING_REPORT_PATH = PROJECT_ROOT / "reports" / "model_training_summary.md"
 DEFAULT_MODEL_METRICS_PATH = PROJECT_ROOT / "reports" / "model_metrics.json"
+DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH = (
+    PROJECT_ROOT / "artifacts" / "online_features" / "latest_features.json"
+)
+DEFAULT_ONLINE_FEATURE_MANIFEST_PATH = (
+    PROJECT_ROOT / "artifacts" / "online_features" / "manifest.json"
+)
+DEFAULT_ONLINE_FEATURE_REPORT_PATH = (
+    PROJECT_ROOT / "reports" / "online_feature_materialization_summary.md"
+)
 
 __all__ = [
     "DEFAULT_MODEL_MANIFEST_PATH",
     "DEFAULT_MODEL_METRICS_PATH",
     "DEFAULT_MODEL_TRAINING_REPORT_PATH",
+    "DEFAULT_ONLINE_FEATURE_MANIFEST_PATH",
+    "DEFAULT_ONLINE_FEATURE_REPORT_PATH",
+    "DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH",
     "DEFAULT_OFFLINE_FEATURE_REPORT_PATH",
     "DEFAULT_OFFLINE_FEATURES_PATH",
     "DEFAULT_SELECTED_MODEL_PATH",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -244,7 +245,14 @@ def _load_model(context: ServingContext) -> None:
         context.load_errors.append(f"missing model artifact: {context.artifacts.model_path}")
         return
     try:
-        context.model = joblib.load(context.artifacts.model_path)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"Setting the shape on a NumPy array has been deprecated in NumPy 2\.5\.",
+                category=DeprecationWarning,
+                module=r"joblib\.numpy_pickle",
+            )
+            context.model = joblib.load(context.artifacts.model_path)
     except Exception as exc:  # pragma: no cover - defensive artifact error path
         context.load_errors.append(f"failed to load model artifact: {exc}")
 

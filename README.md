@@ -2,9 +2,17 @@
 
 Production-style ML feature store and monitoring system with offline/online feature parity, Redis/Postgres serving, FastAPI predictions, drift detection, and Dockerized local ops.
 
+## Verification Status
+
+- Version: `0.1.0`
+- Release gate: `make release-check`
+- Release report: `reports/portfolio/verification_0.1.0.md`
+- CI: GitHub Actions runs Python 3.11, pytest, Ruff, and the demo workflow.
+- Warning policy: project-owned warnings fail tests; known third-party warnings are filtered narrowly.
+
 ## Goal
 
-Build an end-to-end ML system around real temporal event data:
+Build an end-to-end ML system around deterministic synthetic temporal event data:
 data ingestion -> offline features -> online feature store -> model training -> prediction API -> telemetry -> monitoring -> release gate.
 
 ## Reviewer Quickstart
@@ -14,8 +22,34 @@ git clone <repo-url>
 cd feature-store-monitoring-ops
 python -m pip install -e ".[dev]"
 make release-check
+make verify-release
 cat reports/portfolio/portfolio_summary.md
 ```
+
+## What This System Demonstrates
+
+- Deterministic synthetic temporal event generation with default and portfolio-scale presets.
+- Leakage-safe offline feature engineering and chronological train/validation/test splits.
+- Validation-only model selection and one-time test evaluation.
+- Online feature materialization with offline/online parity checks.
+- Local FastAPI serving, durable telemetry, monitoring, drift checks, and data quality checks.
+- JSON, SQLite, Redis-compatible, and SQLAlchemy relational storage paths.
+- One-command workflow orchestration and release verification reporting.
+
+## Current Limitations
+
+- Synthetic data only; no external production data source is connected.
+- FastAPI serving is local and does not include auth, rate limiting, or cloud deployment.
+- Redis, Postgres, and Docker are optional local paths, not required services.
+- SQLite databases are local development stores, not production warehouses.
+- Forecasting models are deterministic baselines for validating the system path.
+
+## Reviewer Docs
+
+- `docs/architecture.md`
+- `docs/operations.md`
+- `docs/system_card.md`
+- `docs/release_checklist.md`
 
 ## Milestone 1: Project Foundation
 

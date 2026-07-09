@@ -41,3 +41,10 @@ line-length = 100
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+    # Release warning budget: warnings emitted by project-owned modules fail tests.
+    "error::Warning:feature_store_monitoring_ops.*",
+    # joblib 1.x can emit this while unpickling sklearn artifacts under NumPy 2.5.
+    # Keep the filter exact so unrelated deprecations remain visible.
+    "ignore:Setting the shape on a NumPy array has been deprecated in NumPy 2\\.5\\.:DeprecationWarning:joblib\\.numpy_pickle",
+]

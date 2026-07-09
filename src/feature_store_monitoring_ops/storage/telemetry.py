@@ -10,6 +10,7 @@ from typing import Any, Protocol
 from sqlalchemy import Column, Float, MetaData, String, Table, create_engine, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import Engine
+from sqlalchemy.pool import NullPool
 
 from feature_store_monitoring_ops.paths import (
     DEFAULT_PREDICTION_LOG_PATH,
@@ -102,7 +103,11 @@ class SQLitePredictionTelemetryStore:
 
     def __post_init__(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        active_engine = self.engine or create_engine(f"sqlite:///{self.db_path}", future=True)
+        active_engine = self.engine or create_engine(
+            f"sqlite:///{self.db_path}",
+            future=True,
+            poolclass=NullPool,
+        )
         self.engine = active_engine
         self.table = Table(
             "prediction_telemetry",

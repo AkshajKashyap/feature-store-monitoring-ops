@@ -11,6 +11,7 @@ import pandas as pd
 from sqlalchemy import Boolean, Column, Float, Integer, MetaData, String, Table, create_engine
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.pool import NullPool
 
 from feature_store_monitoring_ops.features.contract import (
     AS_OF_TIMESTAMP_COLUMN,
@@ -118,7 +119,7 @@ class RelationalFeatureStore:
 
     def __post_init__(self) -> None:
         _ensure_sqlite_parent(self.database_url)
-        self.engine = self.engine or create_engine(self.database_url, future=True)
+        self.engine = self.engine or _create_engine(self.database_url)
         self.events_table = Table(
             "events",
             self.metadata,
@@ -543,6 +544,12 @@ def _ensure_sqlite_parent(database_url: str) -> None:
     if url.get_backend_name() != "sqlite" or url.database in (None, "", ":memory:"):
         return
     Path(url.database).parent.mkdir(parents=True, exist_ok=True)
+
+
+def _create_engine(database_url: str) -> Engine:
+    if relational_backend_from_url(database_url) == "sqlite":
+        return create_engine(database_url, future=True, poolclass=NullPool)
+    return create_engine(database_url, future=True)
 
 
 def _format_optional(value: str | None) -> str:

@@ -5,6 +5,7 @@ This checklist covers the current local release-style gate for the Feature Store
 ## Verified By `make release-check`
 
 - Unit tests pass with `pytest -q`.
+- Warning-visible tests pass with `pytest -q -W default`.
 - Ruff linting passes with `ruff check .`.
 - The deterministic demo workflow runs end to end with `feature-store-ops run-demo-workflow`.
 - Synthetic temporal demand events are generated locally.
@@ -19,6 +20,17 @@ This checklist covers the current local release-style gate for the Feature Store
 - Synthetic events, offline features, and online snapshot metadata are synced into relational SQLAlchemy storage.
 - Relational storage inspection confirms event row count, offline feature row count, online snapshot row count, zone count, and event timestamp bounds.
 - Portfolio workflow and summary reports are written under `reports/portfolio/`.
+- Project-owned warnings are configured to fail tests.
+- Known third-party deprecations are filtered narrowly by message, category, and module.
+- Release verification can be refreshed with `make verify-release`.
+
+## Verified By CI
+
+- GitHub Actions runs on Python 3.11.
+- CI installs the package with development dependencies.
+- CI runs `pytest -q`.
+- CI runs `ruff check .`.
+- CI runs `feature-store-ops run-demo-workflow`.
 
 ## Optional Docker Checks
 
@@ -53,6 +65,7 @@ This checklist covers the current local release-style gate for the Feature Store
 ```bash
 python -m pip install -e ".[dev]"
 make release-check
+make verify-release
 make docker-smoke
 cat reports/portfolio/portfolio_summary.md
 ```

@@ -146,5 +146,5 @@ def test_makefile_target_names_exist() -> None:
     makefile = Path("Makefile").read_text(encoding="utf-8")
     target_text = "\n" + makefile
 
-    for target in ("install", "check", "demo", "smoke", "release-check"):
+    for target in ("install", "check", "demo", "smoke", "release-check", "verify-release"):
         assert f"\n{target}:" in target_text

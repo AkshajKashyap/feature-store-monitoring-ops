@@ -5,13 +5,14 @@ RUFF ?= $(shell if [ -x .venv/bin/ruff ]; then echo .venv/bin/ruff; else echo ru
 FEATURE_STORE_OPS ?= $(shell if [ -x .venv/bin/feature-store-ops ]; then echo .venv/bin/feature-store-ops; else echo feature-store-ops; fi)
 DOCKER_IMAGE ?= feature-store-monitoring-ops-api:local
 
-.PHONY: install check demo smoke release-check docker-build docker-smoke format
+.PHONY: install check demo smoke release-check verify-release docker-build docker-smoke format
 
 install:
 	$(PIP) install -e ".[dev]"
 
 check:
 	$(PYTEST) -q
+	$(PYTEST) -q -W default
 	$(RUFF) check .
 
 demo:
@@ -22,8 +23,12 @@ smoke:
 
 release-check:
 	$(PYTEST) -q
+	$(PYTEST) -q -W default
 	$(RUFF) check .
 	$(FEATURE_STORE_OPS) run-demo-workflow
+
+verify-release:
+	$(FEATURE_STORE_OPS) verify-release
 
 docker-build:
 	docker build -t $(DOCKER_IMAGE) .

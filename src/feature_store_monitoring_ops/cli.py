@@ -48,6 +48,7 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_RELATIONAL_DB_PATH,
     DEFAULT_RELATIONAL_STORAGE_INSPECTION_REPORT_PATH,
     DEFAULT_RELATIONAL_STORAGE_SYNC_REPORT_PATH,
+    DEFAULT_RELEASE_VERIFICATION_REPORT_PATH,
     DEFAULT_PORTFOLIO_SCALE_SUMMARY_PATH,
     DEFAULT_PORTFOLIO_SUMMARY_PATH,
     DEFAULT_SELECTED_MODEL_PATH,
@@ -65,6 +66,7 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_WORKFLOW_SUMMARY_PATH,
     PROJECT_ROOT,
 )
+from feature_store_monitoring_ops.release_verification import generate_release_verification_report
 from feature_store_monitoring_ops.storage.config import StorageConfig
 from feature_store_monitoring_ops.storage.relational import (
     inspect_relational_store,
@@ -114,6 +116,13 @@ def project_info() -> None:
 
     typer.echo(f"name: {APP_NAME}")
     typer.echo(f"version: {__version__}")
+    typer.echo(
+        "core_capabilities: synthetic data, offline features, model training, online features, "
+        "FastAPI serving, telemetry, monitoring, storage adapters, relational storage, workflow verification",
+    )
+    typer.echo(
+        "current_limitations: synthetic data only, local serving, baseline models, optional Docker/Redis/Postgres",
+    )
     typer.echo(f"project_root: {PROJECT_ROOT}")
     typer.echo(f"synthetic_events_path: {DEFAULT_SYNTHETIC_EVENTS_PATH}")
     typer.echo(f"synthetic_report_path: {DEFAULT_SYNTHETIC_REPORT_PATH}")
@@ -148,6 +157,7 @@ def project_info() -> None:
     typer.echo(f"workflow_results_path: {DEFAULT_WORKFLOW_RESULTS_PATH}")
     typer.echo(f"portfolio_summary_path: {DEFAULT_PORTFOLIO_SUMMARY_PATH}")
     typer.echo(f"portfolio_scale_summary_path: {DEFAULT_PORTFOLIO_SCALE_SUMMARY_PATH}")
+    typer.echo(f"release_verification_report_path: {DEFAULT_RELEASE_VERIFICATION_REPORT_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -913,6 +923,27 @@ def run_demo_workflow_command(
     typer.echo(f"wrote workflow summary to {result.workflow_summary_path}")
     typer.echo(f"wrote workflow results to {result.workflow_results_path}")
     typer.echo(f"wrote portfolio summary to {result.portfolio_summary_path}")
+    if not result.passed:
+        raise typer.Exit(code=1)
+
+
+@app.command("verify-release")
+def verify_release_command(
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown release verification report path."),
+    ] = DEFAULT_RELEASE_VERIFICATION_REPORT_PATH,
+) -> None:
+    """Run release checks and write the release verification report."""
+
+    result = generate_release_verification_report(report_path=report_path)
+    typer.echo(f"pytest -q: {'passed' if result.pytest_result.passed else 'failed'}")
+    typer.echo(f"pytest -q -W default: {'passed' if result.warning_result.passed else 'failed'}")
+    typer.echo(f"warning status: {result.warning_status}")
+    typer.echo(f"ruff check .: {'passed' if result.ruff_result.passed else 'failed'}")
+    typer.echo(f"demo workflow: {result.workflow_status}")
+    typer.echo(f"docker status: {result.docker_status}")
+    typer.echo(f"wrote release verification report to {result.report_path}")
     if not result.passed:
         raise typer.Exit(code=1)
 

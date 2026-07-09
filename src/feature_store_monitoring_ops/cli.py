@@ -45,6 +45,7 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_ONLINE_FEATURE_REPORT_PATH,
     DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
     DEFAULT_PREDICTION_LOG_PATH,
+    DEFAULT_PORTFOLIO_SUMMARY_PATH,
     DEFAULT_SELECTED_MODEL_PATH,
     DEFAULT_SERVING_MONITORING_METRICS_PATH,
     DEFAULT_SERVING_MONITORING_REPORT_PATH,
@@ -56,6 +57,8 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_TEST_FEATURES_PATH,
     DEFAULT_TRAIN_FEATURES_PATH,
     DEFAULT_VALIDATION_FEATURES_PATH,
+    DEFAULT_WORKFLOW_RESULTS_PATH,
+    DEFAULT_WORKFLOW_SUMMARY_PATH,
     PROJECT_ROOT,
 )
 from feature_store_monitoring_ops.storage.config import StorageConfig
@@ -65,6 +68,7 @@ from feature_store_monitoring_ops.synthetic_events import (
     generate_and_save_synthetic_events,
     parse_start_timestamp,
 )
+from feature_store_monitoring_ops.workflow import DemoWorkflowConfig, run_demo_workflow
 
 APP_NAME = "feature-store-monitoring-ops"
 
@@ -125,6 +129,9 @@ def project_info() -> None:
     typer.echo(f"sqlite_telemetry_db_path: {DEFAULT_SQLITE_TELEMETRY_DB_PATH}")
     typer.echo(f"storage_sync_report_path: {DEFAULT_STORAGE_SYNC_REPORT_PATH}")
     typer.echo(f"storage_inspection_report_path: {DEFAULT_STORAGE_INSPECTION_REPORT_PATH}")
+    typer.echo(f"workflow_summary_path: {DEFAULT_WORKFLOW_SUMMARY_PATH}")
+    typer.echo(f"workflow_results_path: {DEFAULT_WORKFLOW_RESULTS_PATH}")
+    typer.echo(f"portfolio_summary_path: {DEFAULT_PORTFOLIO_SUMMARY_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -719,6 +726,38 @@ def inspect_storage_command(
     typer.echo(f"min telemetry timestamp: {result.min_telemetry_timestamp or 'n/a'}")
     typer.echo(f"max telemetry timestamp: {result.max_telemetry_timestamp or 'n/a'}")
     typer.echo(f"wrote storage inspection report to {result.report_path}")
+
+
+@app.command("run-demo-workflow")
+def run_demo_workflow_command(
+    output_root: Annotated[
+        Path,
+        typer.Option("--output-root", help="Root directory for demo workflow outputs."),
+    ] = PROJECT_ROOT,
+    events: Annotated[
+        int,
+        typer.Option("--events", help="Number of synthetic events for the demo workflow."),
+    ] = 720,
+    seed: Annotated[
+        int,
+        typer.Option("--seed", help="Synthetic event seed for deterministic workflow runs."),
+    ] = 42,
+) -> None:
+    """Run the full deterministic local demo workflow."""
+
+    config = DemoWorkflowConfig(output_root=output_root, num_events=events, seed=seed)
+    result = run_demo_workflow(config)
+    for stage in result.stages:
+        typer.echo(f"{stage.name}: {stage.status}")
+        if stage.error_message:
+            typer.echo(f"  error: {stage.error_message}")
+
+    typer.echo(f"workflow status: {result.status}")
+    typer.echo(f"wrote workflow summary to {result.workflow_summary_path}")
+    typer.echo(f"wrote workflow results to {result.workflow_results_path}")
+    typer.echo(f"wrote portfolio summary to {result.portfolio_summary_path}")
+    if not result.passed:
+        raise typer.Exit(code=1)
 
 
 def _parse_cli_timestamp(value: str) -> datetime:

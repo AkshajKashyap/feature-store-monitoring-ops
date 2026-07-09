@@ -7,6 +7,16 @@ Production-style ML feature store and monitoring system with offline/online feat
 Build an end-to-end ML system around real temporal event data:
 data ingestion -> offline features -> online feature store -> model training -> prediction API -> telemetry -> monitoring -> release gate.
 
+## Reviewer Quickstart
+
+```bash
+git clone <repo-url>
+cd feature-store-monitoring-ops
+python -m pip install -e ".[dev]"
+make release-check
+cat reports/portfolio/portfolio_summary.md
+```
+
 ## Milestone 1: Project Foundation
 
 This milestone provides a clean Python package, a Typer CLI, schema checks, and a deterministic synthetic temporal event generator. It does not depend on external datasets or services.
@@ -363,3 +373,43 @@ Storage configuration can come from CLI options or environment variables:
 - `FEATURE_STORE_OPS_REDIS_URL`: Redis URL for the Redis adapter
 
 Redis support is adapter-level only at this milestone. Tests use an injected fake client, and local runs do not require Redis unless `redis` is selected and a Redis client/server is configured.
+
+## Milestone 9: Demo Workflow And Portfolio Summary
+
+This milestone adds a one-command deterministic local workflow and release-style smoke gate. It still does not require Docker, Redis, Postgres, or cloud services.
+
+### Run The Full Demo Workflow
+
+```bash
+feature-store-ops run-demo-workflow
+```
+
+Or use Make:
+
+```bash
+make demo
+make release-check
+```
+
+The workflow runs:
+
+- Synthetic event generation
+- Offline feature engineering
+- Model training and test evaluation
+- Online feature materialization
+- In-process API smoke test
+- Deterministic traffic simulation
+- Serving monitoring
+- Drift and data quality monitoring
+- Storage sync
+- Storage inspection
+
+It writes tracked portfolio outputs:
+
+- `reports/portfolio/workflow_summary.md`
+- `reports/portfolio/workflow_results.json`
+- `reports/portfolio/portfolio_summary.md`
+
+The release checklist is tracked at:
+
+- `docs/release_checklist.md`

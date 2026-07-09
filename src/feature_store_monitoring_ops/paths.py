@@ -34,6 +34,9 @@ DEFAULT_STORAGE_SYNC_REPORT_PATH = PROJECT_ROOT / "reports" / "storage_sync_summ
 DEFAULT_STORAGE_INSPECTION_REPORT_PATH = (
     PROJECT_ROOT / "reports" / "storage_inspection_summary.md"
 )
+DEFAULT_WORKFLOW_SUMMARY_PATH = PROJECT_ROOT / "reports" / "portfolio" / "workflow_summary.md"
+DEFAULT_WORKFLOW_RESULTS_PATH = PROJECT_ROOT / "reports" / "portfolio" / "workflow_results.json"
+DEFAULT_PORTFOLIO_SUMMARY_PATH = PROJECT_ROOT / "reports" / "portfolio" / "portfolio_summary.md"
 
 __all__ = [
     "DEFAULT_API_SERVING_REPORT_PATH",
@@ -59,5 +62,8 @@ __all__ = [
     "DEFAULT_TEST_FEATURES_PATH",
     "DEFAULT_TRAIN_FEATURES_PATH",
     "DEFAULT_VALIDATION_FEATURES_PATH",
+    "DEFAULT_PORTFOLIO_SUMMARY_PATH",
+    "DEFAULT_WORKFLOW_RESULTS_PATH",
+    "DEFAULT_WORKFLOW_SUMMARY_PATH",
     "PROJECT_ROOT",
 ]

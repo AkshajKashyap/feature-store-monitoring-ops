@@ -1,11 +1,11 @@
 {
-  "average_latency_ms": 5.626707,
+  "average_latency_ms": 9.727699,
   "error_rate": 0.166667,
   "failed_predictions": 1,
   "max_prediction": 34.800668,
   "mean_prediction": 28.19738,
   "min_prediction": 20.803178,
-  "p95_latency_ms": 15.496142,
+  "p95_latency_ms": 38.765911,
   "request_count_by_zone": {
     "unknown_zone": 1,
     "zone_01": 1,

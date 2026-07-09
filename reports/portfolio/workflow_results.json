@@ -1,0 +1,194 @@
+{
+  "output_paths": {
+    "portfolio_summary": "/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/portfolio_summary.md",
+    "workflow_results": "/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/workflow_results.json",
+    "workflow_summary": "/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/workflow_summary.md"
+  },
+  "stage_order": [
+    "generate_synthetic_events",
+    "build_offline_features",
+    "train_model",
+    "materialize_online_features",
+    "api_smoke_test",
+    "simulate_traffic",
+    "monitor_serving",
+    "monitor_drift",
+    "sync_storage",
+    "inspect_storage"
+  ],
+  "stages": [
+    {
+      "error_message": null,
+      "metrics": {
+        "rows_written": 720,
+        "seed": 42
+      },
+      "name": "generate_synthetic_events",
+      "output_paths": {
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/synthetic_events_summary.md",
+        "synthetic_events": "/home/akshaj/Building/feature-store-monitoring-ops/data/processed/synthetic_events.csv"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "offline": 595,
+        "test": 90,
+        "train": 416,
+        "validation": 89
+      },
+      "name": "build_offline_features",
+      "output_paths": {
+        "offline_features": "/home/akshaj/Building/feature-store-monitoring-ops/data/processed/offline_features.parquet",
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/offline_feature_summary.md",
+        "test_features": "/home/akshaj/Building/feature-store-monitoring-ops/data/processed/test_features.parquet",
+        "train_features": "/home/akshaj/Building/feature-store-monitoring-ops/data/processed/train_features.parquet",
+        "validation_features": "/home/akshaj/Building/feature-store-monitoring-ops/data/processed/validation_features.parquet"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "selected_model": "hist_gradient_boosting",
+        "test_mae": 6.29841,
+        "test_r2": 0.313692,
+        "test_rmse": 7.948043,
+        "test_rows": 90,
+        "train_rows": 416,
+        "validation_rows": 89
+      },
+      "name": "train_model",
+      "output_paths": {
+        "metrics": "/home/akshaj/Building/feature-store-monitoring-ops/reports/model_metrics.json",
+        "model_manifest": "/home/akshaj/Building/feature-store-monitoring-ops/artifacts/models/model_manifest.json",
+        "selected_model": "/home/akshaj/Building/feature-store-monitoring-ops/artifacts/models/selected_model.joblib",
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/model_training_summary.md"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "row_count": 5
+      },
+      "name": "materialize_online_features",
+      "output_paths": {
+        "manifest": "/home/akshaj/Building/feature-store-monitoring-ops/artifacts/online_features/manifest.json",
+        "snapshot": "/home/akshaj/Building/feature-store-monitoring-ops/artifacts/online_features/latest_features.json",
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/online_feature_materialization_summary.md"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "prediction": 20.803178,
+        "smoke_test_passed": true,
+        "zone_id": "zone_01"
+      },
+      "name": "api_smoke_test",
+      "output_paths": {
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/api_serving_summary.md"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "failed_requests": 1,
+        "successful_requests": 5,
+        "total_requests": 6,
+        "zones_requested": [
+          "zone_01",
+          "zone_02",
+          "zone_03",
+          "zone_04",
+          "zone_05",
+          "unknown_zone"
+        ]
+      },
+      "name": "simulate_traffic",
+      "output_paths": {
+        "prediction_log": "/home/akshaj/Building/feature-store-monitoring-ops/logs/predictions.jsonl"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "error_rate": 0.166667,
+        "failed_predictions": 1,
+        "successful_predictions": 5,
+        "total_requests": 6,
+        "warnings": 2
+      },
+      "name": "monitor_serving",
+      "output_paths": {
+        "metrics": "/home/akshaj/Building/feature-store-monitoring-ops/reports/serving_monitoring_metrics.json",
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/serving_monitoring_summary.md"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "current_rows": 90,
+        "max_psi": 5.118269,
+        "prediction_count": 5,
+        "reference_rows": 416,
+        "warnings": 8
+      },
+      "name": "monitor_drift",
+      "output_paths": {
+        "metrics": "/home/akshaj/Building/feature-store-monitoring-ops/reports/drift_monitoring_metrics.json",
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/drift_monitoring_summary.md"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "online_feature_row_count": 5,
+        "telemetry_source_row_count": 6,
+        "telemetry_store_row_count": 6,
+        "zone_ids": [
+          "zone_01",
+          "zone_02",
+          "zone_03",
+          "zone_04",
+          "zone_05"
+        ]
+      },
+      "name": "sync_storage",
+      "output_paths": {
+        "sqlite": "/home/akshaj/Building/feature-store-monitoring-ops/artifacts/storage/telemetry.db",
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/storage_sync_summary.md"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "max_telemetry_timestamp": "2026-02-01T00:00:05+00:00",
+        "min_telemetry_timestamp": "2026-02-01T00:00:00+00:00",
+        "online_feature_row_count": 5,
+        "telemetry_row_count": 6,
+        "zone_ids": [
+          "zone_01",
+          "zone_02",
+          "zone_03",
+          "zone_04",
+          "zone_05"
+        ]
+      },
+      "name": "inspect_storage",
+      "output_paths": {
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/storage_inspection_summary.md"
+      },
+      "status": "passed"
+    }
+  ],
+  "status": "passed"
+}

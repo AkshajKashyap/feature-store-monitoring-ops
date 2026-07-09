@@ -1,9 +1,28 @@
+PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; else echo python; fi)
+PIP ?= $(PYTHON) -m pip
+PYTEST ?= $(shell if [ -x .venv/bin/pytest ]; then echo .venv/bin/pytest; else echo pytest; fi)
+RUFF ?= $(shell if [ -x .venv/bin/ruff ]; then echo .venv/bin/ruff; else echo ruff; fi)
+FEATURE_STORE_OPS ?= $(shell if [ -x .venv/bin/feature-store-ops ]; then echo .venv/bin/feature-store-ops; else echo feature-store-ops; fi)
+
+.PHONY: install check demo smoke release-check format
+
 install:
-	python -m pip install -e ".[dev]"
+	$(PIP) install -e ".[dev]"
 
 check:
-	pytest -q
-	ruff check .
+	$(PYTEST) -q
+	$(RUFF) check .
+
+demo:
+	$(FEATURE_STORE_OPS) run-demo-workflow
+
+smoke:
+	$(FEATURE_STORE_OPS) run-demo-workflow
+
+release-check:
+	$(PYTEST) -q
+	$(RUFF) check .
+	$(FEATURE_STORE_OPS) run-demo-workflow
 
 format:
-	ruff format .
+	$(RUFF) format .

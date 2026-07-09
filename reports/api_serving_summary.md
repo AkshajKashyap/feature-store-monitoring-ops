@@ -43,7 +43,7 @@ Added a local FastAPI prediction service for Milestone 5.
 - Request count: 5
 - Prediction count: 1
 - Error count: 0
-- Average prediction latency ms: 21.353041
+- Average prediction latency ms: 4.257036
 
 ## Notes
 

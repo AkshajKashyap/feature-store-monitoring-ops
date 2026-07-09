@@ -19,6 +19,10 @@ from feature_store_monitoring_ops.api.service import ServingArtifacts
 from feature_store_monitoring_ops.features.offline import build_and_save_offline_features
 from feature_store_monitoring_ops.features.online import materialize_online_features
 from feature_store_monitoring_ops.models.training import train_and_evaluate_models
+from feature_store_monitoring_ops.monitoring.drift import (
+    DriftMonitoringThresholds,
+    monitor_drift,
+)
 from feature_store_monitoring_ops.monitoring.serving import (
     ServingMonitoringThresholds,
     monitor_prediction_logs,
@@ -30,6 +34,8 @@ from feature_store_monitoring_ops.monitoring.telemetry import (
 )
 from feature_store_monitoring_ops.paths import (
     DEFAULT_API_SERVING_REPORT_PATH,
+    DEFAULT_DRIFT_MONITORING_METRICS_PATH,
+    DEFAULT_DRIFT_MONITORING_REPORT_PATH,
     DEFAULT_MODEL_MANIFEST_PATH,
     DEFAULT_MODEL_METRICS_PATH,
     DEFAULT_MODEL_TRAINING_REPORT_PATH,
@@ -109,6 +115,8 @@ def project_info() -> None:
     typer.echo(f"prediction_log_path: {DEFAULT_PREDICTION_LOG_PATH}")
     typer.echo(f"serving_monitoring_report_path: {DEFAULT_SERVING_MONITORING_REPORT_PATH}")
     typer.echo(f"serving_monitoring_metrics_path: {DEFAULT_SERVING_MONITORING_METRICS_PATH}")
+    typer.echo(f"drift_monitoring_report_path: {DEFAULT_DRIFT_MONITORING_REPORT_PATH}")
+    typer.echo(f"drift_monitoring_metrics_path: {DEFAULT_DRIFT_MONITORING_METRICS_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -507,6 +515,86 @@ def monitor_serving_command(
     typer.echo(f"warnings: {len(result.warnings)}")
     typer.echo(f"wrote serving monitoring report to {result.report_path}")
     typer.echo(f"wrote serving monitoring metrics to {result.metrics_path}")
+
+
+@app.command("monitor-drift")
+def monitor_drift_command(
+    reference_path: Annotated[
+        Path,
+        typer.Option("--reference-path", help="Reference feature window parquet or JSON path."),
+    ] = DEFAULT_TRAIN_FEATURES_PATH,
+    current_path: Annotated[
+        Path,
+        typer.Option("--current-path", help="Current feature window parquet or JSON path."),
+    ] = DEFAULT_TEST_FEATURES_PATH,
+    telemetry_log_path: Annotated[
+        Path,
+        typer.Option("--telemetry-log-path", help="JSONL prediction telemetry log path."),
+    ] = DEFAULT_PREDICTION_LOG_PATH,
+    model_metrics_path: Annotated[
+        Path,
+        typer.Option("--model-metrics-path", help="Model metrics JSON used as prediction reference."),
+    ] = DEFAULT_MODEL_METRICS_PATH,
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown drift monitoring report path."),
+    ] = DEFAULT_DRIFT_MONITORING_REPORT_PATH,
+    metrics_path: Annotated[
+        Path,
+        typer.Option("--metrics-path", help="Tracked JSON drift monitoring metrics path."),
+    ] = DEFAULT_DRIFT_MONITORING_METRICS_PATH,
+    psi_threshold: Annotated[
+        float,
+        typer.Option("--psi-threshold", help="Warning threshold for feature PSI."),
+    ] = 0.20,
+    prediction_mean_shift_threshold: Annotated[
+        float,
+        typer.Option(
+            "--prediction-mean-shift-threshold",
+            help="Warning threshold for absolute prediction mean shift.",
+        ),
+    ] = 5.0,
+    min_prediction_count: Annotated[
+        int,
+        typer.Option("--min-prediction-count", help="Warning threshold for small prediction logs."),
+    ] = 10,
+) -> None:
+    """Build feature drift, prediction drift, and data quality monitoring outputs."""
+
+    thresholds = DriftMonitoringThresholds(
+        psi=psi_threshold,
+        prediction_mean_shift=prediction_mean_shift_threshold,
+        min_prediction_count=min_prediction_count,
+    )
+    try:
+        result = monitor_drift(
+            reference_path=reference_path,
+            current_path=current_path,
+            telemetry_log_path=telemetry_log_path,
+            model_metrics_path=model_metrics_path,
+            report_path=report_path,
+            metrics_path=metrics_path,
+            thresholds=thresholds,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    psi_values = [
+        float(values["psi"])
+        for values in result.metrics["numeric_feature_drift"].values()
+        if values["psi"] is not None
+    ]
+    typer.echo(
+        "monitored feature drift rows: "
+        f"reference={result.metrics['row_counts']['reference']} "
+        f"current={result.metrics['row_counts']['current']}",
+    )
+    if psi_values:
+        typer.echo(f"max feature psi: {max(psi_values):.6f}")
+    typer.echo(f"prediction drift count: {result.metrics['prediction_drift']['count']}")
+    typer.echo(f"warnings: {len(result.warnings)}")
+    typer.echo(f"wrote drift monitoring report to {result.report_path}")
+    typer.echo(f"wrote drift monitoring metrics to {result.metrics_path}")
 
 
 def _parse_cli_timestamp(value: str) -> datetime:

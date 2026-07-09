@@ -1,5 +1,22 @@
 """Serving telemetry and monitoring utilities."""
 
+from feature_store_monitoring_ops.monitoring.drift import (
+    COVERAGE_DRIFT_COLUMNS,
+    NONNEGATIVE_DEMAND_FEATURE_COLUMNS,
+    NUMERIC_DRIFT_FEATURE_COLUMNS,
+    REQUIRED_DRIFT_MONITORING_METRIC_KEYS,
+    DriftMonitoringResult,
+    DriftMonitoringThresholds,
+    build_drift_monitoring_report,
+    build_drift_monitoring_warnings,
+    compute_categorical_coverage_drift,
+    compute_numeric_feature_drift,
+    compute_prediction_drift,
+    load_reference_prediction_summary,
+    monitor_drift,
+    read_feature_window,
+    run_data_quality_checks,
+)
 from feature_store_monitoring_ops.monitoring.serving import (
     REQUIRED_SERVING_MONITORING_METRIC_KEYS,
     ServingMonitoringResult,
@@ -19,17 +36,32 @@ from feature_store_monitoring_ops.monitoring.telemetry import (
 )
 
 __all__ = [
+    "COVERAGE_DRIFT_COLUMNS",
+    "NONNEGATIVE_DEMAND_FEATURE_COLUMNS",
+    "NUMERIC_DRIFT_FEATURE_COLUMNS",
+    "REQUIRED_DRIFT_MONITORING_METRIC_KEYS",
     "REQUIRED_SERVING_MONITORING_METRIC_KEYS",
+    "DriftMonitoringResult",
+    "DriftMonitoringThresholds",
     "IncrementingClock",
     "PredictionTelemetryLogger",
     "ServingMonitoringResult",
     "ServingMonitoringThresholds",
     "TelemetrySimulationResult",
+    "build_drift_monitoring_report",
+    "build_drift_monitoring_warnings",
     "build_serving_monitoring_report",
     "build_serving_monitoring_warnings",
+    "compute_categorical_coverage_drift",
+    "compute_numeric_feature_drift",
+    "compute_prediction_drift",
     "compute_serving_monitoring_metrics",
+    "load_reference_prediction_summary",
+    "monitor_drift",
     "monitor_prediction_logs",
+    "read_feature_window",
     "read_prediction_logs",
     "reset_prediction_log",
+    "run_data_quality_checks",
     "utc_now",
 ]

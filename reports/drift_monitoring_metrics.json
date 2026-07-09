@@ -1,0 +1,308 @@
+{
+  "categorical_coverage_drift": {
+    "day_of_week": {
+      "current_count": 4,
+      "current_values": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "lost_values": [
+        0,
+        5,
+        6
+      ],
+      "new_values": [],
+      "reference_count": 7,
+      "reference_values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    "hour": {
+      "current_count": 24,
+      "current_values": [
+        0,
+        1,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        2,
+        20,
+        21,
+        22,
+        23,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "lost_values": [],
+      "new_values": [],
+      "reference_count": 24,
+      "reference_values": [
+        0,
+        1,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        2,
+        20,
+        21,
+        22,
+        23,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    "zone_id": {
+      "current_count": 5,
+      "current_values": [
+        "zone_01",
+        "zone_02",
+        "zone_03",
+        "zone_04",
+        "zone_05"
+      ],
+      "lost_values": [],
+      "new_values": [],
+      "reference_count": 5,
+      "reference_values": [
+        "zone_01",
+        "zone_02",
+        "zone_03",
+        "zone_04",
+        "zone_05"
+      ]
+    }
+  },
+  "data_quality": {
+    "current": {
+      "checks": {
+        "no_duplicate_entity_as_of_rows": {
+          "details": "no duplicate entity/as-of rows",
+          "passed": true
+        },
+        "no_missing_model_input_features": {
+          "details": "no missing model input feature values",
+          "passed": true
+        },
+        "nonnegative_demand_features": {
+          "details": "nonnegative lag and rolling demand features",
+          "passed": true
+        },
+        "required_columns_present": {
+          "details": "all required columns present",
+          "passed": true
+        },
+        "timestamps_parse": {
+          "details": "timestamps parse correctly",
+          "passed": true
+        }
+      },
+      "failures": [],
+      "passed": true
+    },
+    "reference": {
+      "checks": {
+        "no_duplicate_entity_as_of_rows": {
+          "details": "no duplicate entity/as-of rows",
+          "passed": true
+        },
+        "no_missing_model_input_features": {
+          "details": "no missing model input feature values",
+          "passed": true
+        },
+        "nonnegative_demand_features": {
+          "details": "nonnegative lag and rolling demand features",
+          "passed": true
+        },
+        "required_columns_present": {
+          "details": "all required columns present",
+          "passed": true
+        },
+        "timestamps_parse": {
+          "details": "timestamps parse correctly",
+          "passed": true
+        }
+      },
+      "failures": [],
+      "passed": true
+    }
+  },
+  "numeric_feature_drift": {
+    "day_of_week": {
+      "current_mean": 2.433333,
+      "current_missing_rate": 0.0,
+      "current_std": 1.085766,
+      "mean_shift": -0.468109,
+      "missing_rate_difference": 0.0,
+      "psi": 5.118269,
+      "reference_mean": 2.901442,
+      "reference_missing_rate": 0.0,
+      "reference_std": 1.980044,
+      "std_shift": -0.894278
+    },
+    "hour": {
+      "current_mean": 11.188889,
+      "current_missing_rate": 0.0,
+      "current_std": 6.757538,
+      "mean_shift": -0.16688,
+      "missing_rate_difference": 0.0,
+      "psi": 0.003869,
+      "reference_mean": 11.355769,
+      "reference_missing_rate": 0.0,
+      "reference_std": 6.946801,
+      "std_shift": -0.189263
+    },
+    "is_weekend": {
+      "current_mean": 0.0,
+      "current_missing_rate": 0.0,
+      "current_std": 0.0,
+      "mean_shift": -0.262019,
+      "missing_rate_difference": 0.0,
+      "psi": 3.348596,
+      "reference_mean": 0.262019,
+      "reference_missing_rate": 0.0,
+      "reference_std": 0.439733,
+      "std_shift": -0.439733
+    },
+    "lag_1_observed_demand": {
+      "current_mean": 30.918133,
+      "current_missing_rate": 0.0,
+      "current_std": 10.119452,
+      "mean_shift": 3.685972,
+      "missing_rate_difference": 0.0,
+      "psi": 0.414319,
+      "reference_mean": 27.232161,
+      "reference_missing_rate": 0.0,
+      "reference_std": 9.264788,
+      "std_shift": 0.854664
+    },
+    "lag_3_observed_demand": {
+      "current_mean": 30.944489,
+      "current_missing_rate": 0.0,
+      "current_std": 9.987488,
+      "mean_shift": 3.67871,
+      "missing_rate_difference": 0.0,
+      "psi": 0.350197,
+      "reference_mean": 27.265779,
+      "reference_missing_rate": 0.0,
+      "reference_std": 8.94527,
+      "std_shift": 1.042218
+    },
+    "rolling_mean_3": {
+      "current_mean": 30.90583,
+      "current_missing_rate": 0.0,
+      "current_std": 7.416735,
+      "mean_shift": 3.632255,
+      "missing_rate_difference": 0.0,
+      "psi": 0.72583,
+      "reference_mean": 27.273575,
+      "reference_missing_rate": 0.0,
+      "reference_std": 6.488377,
+      "std_shift": 0.928358
+    },
+    "rolling_mean_6": {
+      "current_mean": 30.514731,
+      "current_missing_rate": 0.0,
+      "current_std": 6.259834,
+      "mean_shift": 3.363791,
+      "missing_rate_difference": 0.0,
+      "psi": 0.781236,
+      "reference_mean": 27.15094,
+      "reference_missing_rate": 0.0,
+      "reference_std": 5.00403,
+      "std_shift": 1.255804
+    },
+    "rolling_std_6": {
+      "current_mean": 8.504908,
+      "current_missing_rate": 0.0,
+      "current_std": 2.5241,
+      "mean_shift": 0.627408,
+      "missing_rate_difference": 0.0,
+      "psi": 0.342578,
+      "reference_mean": 7.8775,
+      "reference_missing_rate": 0.0,
+      "reference_std": 2.525415,
+      "std_shift": -0.001315
+    },
+    "zone_hour_mean_demand": {
+      "current_mean": 28.176441,
+      "current_missing_rate": 0.0,
+      "current_std": 8.597625,
+      "mean_shift": 1.424374,
+      "missing_rate_difference": 0.0,
+      "psi": 0.13323,
+      "reference_mean": 26.752067,
+      "reference_missing_rate": 0.0,
+      "reference_std": 8.803392,
+      "std_shift": -0.205767
+    }
+  },
+  "prediction_drift": {
+    "count": 5,
+    "current_mean_prediction": 28.19738,
+    "max_prediction": 34.800668,
+    "mean_prediction_shift": -2.965216,
+    "min_prediction": 20.803178,
+    "reference_available": true,
+    "reference_mean_prediction": 31.162596,
+    "reference_selected_model": "hist_gradient_boosting",
+    "reference_source": "/home/akshaj/Building/feature-store-monitoring-ops/reports/model_metrics.json"
+  },
+  "row_counts": {
+    "current": 90,
+    "prediction_logs": 6,
+    "reference": 416
+  },
+  "sources": {
+    "current_features": "/home/akshaj/Building/feature-store-monitoring-ops/data/processed/test_features.parquet",
+    "model_metrics": "/home/akshaj/Building/feature-store-monitoring-ops/reports/model_metrics.json",
+    "prediction_logs": "/home/akshaj/Building/feature-store-monitoring-ops/logs/predictions.jsonl",
+    "reference_features": "/home/akshaj/Building/feature-store-monitoring-ops/data/processed/train_features.parquet"
+  },
+  "thresholds": {
+    "min_prediction_count": 10,
+    "prediction_mean_shift": 5.0,
+    "psi": 0.2
+  },
+  "warnings": [
+    "Feature `day_of_week` PSI 5.118 exceeds threshold 0.200.",
+    "Feature `is_weekend` PSI 3.349 exceeds threshold 0.200.",
+    "Feature `lag_1_observed_demand` PSI 0.414 exceeds threshold 0.200.",
+    "Feature `lag_3_observed_demand` PSI 0.350 exceeds threshold 0.200.",
+    "Feature `rolling_mean_3` PSI 0.726 exceeds threshold 0.200.",
+    "Feature `rolling_mean_6` PSI 0.781 exceeds threshold 0.200.",
+    "Feature `rolling_std_6` PSI 0.343 exceeds threshold 0.200.",
+    "Prediction drift sample is too small to trust (5 < 10)."
+  ]
+}

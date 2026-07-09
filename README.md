@@ -286,3 +286,39 @@ It writes tracked reports:
 Serving monitoring metrics include total requests, successful and failed predictions, error rate, average and p95 latency, prediction summary statistics, request count by zone, and stale feature count.
 
 Warnings are emitted when error rate, p95 latency, stale feature count, or small prediction sample size crosses configured thresholds.
+
+## Milestone 7: Drift And Data Quality Monitoring
+
+This milestone adds local drift monitoring for offline feature windows, recent prediction telemetry, and feature data quality. It still does not require Redis, Postgres, Docker, or cloud services.
+
+### Monitor Drift
+
+```bash
+feature-store-ops generate-synthetic-events
+feature-store-ops build-offline-features
+feature-store-ops train-model
+feature-store-ops materialize-online-features
+feature-store-ops simulate-traffic
+feature-store-ops monitor-serving
+feature-store-ops monitor-drift
+```
+
+By default, drift monitoring compares:
+
+- Reference features: `data/processed/train_features.parquet`
+- Current features: `data/processed/test_features.parquet`
+- Prediction telemetry: `logs/predictions.jsonl`
+- Prediction reference summary: `reports/model_metrics.json`
+
+It writes tracked reports:
+
+- `reports/drift_monitoring_summary.md`
+- `reports/drift_monitoring_metrics.json`
+
+Feature drift metrics include mean shift, standard deviation shift, missing-rate difference, and PSI for numeric model input features. Coverage drift tracks `zone_id`, `hour`, and `day_of_week` values.
+
+Prediction drift compares recent successful prediction logs with the selected model test-set prediction summary and reports mean prediction shift, min/max prediction, and sample count.
+
+Data quality checks validate required feature columns, missing model inputs, duplicate entity/as-of rows, nonnegative lag/rolling demand features, and timestamp parsing.
+
+Warnings are emitted for high PSI, missing feature values, lost zone coverage, large prediction mean shift, too few prediction logs, and data quality failures.

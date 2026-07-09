@@ -4,10 +4,10 @@ Tracked release-quality verification report for the local deterministic system.
 
 ## Check Results
 
-- `pytest -q`: passed (7.386s)
-- `pytest -q -W default`: passed (7.097s)
+- `pytest -q`: passed (7.059s)
+- `pytest -q -W default`: passed (8.390s)
 - Warning status: clean: no warnings emitted
-- `ruff check .`: passed (0.024s)
+- `ruff check .`: passed (0.017s)
 - Demo workflow: passed
 - Docker availability: unavailable: The command 'docker' could not be found in this WSL 2 distro.
 
@@ -42,7 +42,7 @@ Tracked release-quality verification report for the local deterministic system.
 ## Known Limitations
 
 - Synthetic data only; no external production event source is connected.
-- FastAPI serving is local and does not include auth, rate limiting, or cloud deployment.
+- FastAPI serving is local; optional API key auth exists, but full identity, rate limiting, and cloud deployment are out of scope.
 - Redis and Postgres paths are optional adapters and are not required by release checks.
 - SQLite databases are local development stores, not production warehouses.
 - Models are deterministic baselines for system validation, not tuned production forecasts.

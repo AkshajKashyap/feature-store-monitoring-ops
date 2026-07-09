@@ -1,20 +1,31 @@
 # Feature Store Monitoring Ops
 
-Production-style ML feature store and monitoring system with offline/online feature parity, Redis/Postgres serving, FastAPI predictions, drift detection, and Dockerized local ops.
+Deterministic local MLOps portfolio project demonstrating a feature-store-backed demand forecasting workflow with FastAPI serving, telemetry, monitoring, storage adapters, CI, and release gating.
 
-## Verification Status
+## v0.1.0 Verification Status
 
 - Version: `0.1.0`
-- Release gate: expected `warn` for v0.1.0 local portfolio release
+- Release gate decision: `warn`
+- Release boundary: portfolio/local ops, not production deployment
 - Release report: `reports/portfolio/verification_0.1.0.md`
 - Release gate reports: `reports/portfolio/release_gate_0.1.0.md` and `reports/portfolio/release_gate_0.1.0.json`
+- Checks: `pytest -q`, `pytest -q -W default`, `ruff check .`, `make release-check`, and `make verify-release` pass.
+- Warning status: clean, with project-owned warnings configured to fail tests.
 - CI: GitHub Actions runs Python 3.11, pytest, Ruff, and the demo workflow.
-- Warning policy: project-owned warnings fail tests; known third-party warnings are filtered narrowly.
 
 ## Goal
 
 Build an end-to-end ML system around deterministic synthetic temporal event data:
 data ingestion -> offline features -> online feature store -> model training -> prediction API -> telemetry -> monitoring -> release gate.
+
+## Key Metrics
+
+- Default workflow: 720 synthetic events, 595 offline feature rows, 5 online feature rows, 6 simulated prediction requests.
+- Portfolio-scale workflow: 3,000 synthetic events, 2,800 offline feature rows, 50 online feature rows, 120 simulated prediction requests.
+- Selected model: `hist_gradient_boosting`.
+- Test metrics: MAE `6.29841`, RMSE `7.948043`, R2 `0.313692`.
+- Release gate: `warn` with 0 hold reasons.
+- Docker smoke: unavailable in this WSL environment; Docker remains optional and is not faked as passing.
 
 ## Reviewer Quickstart
 
@@ -37,6 +48,7 @@ cat reports/portfolio/portfolio_summary.md
 - API safety controls for optional API key auth, freshness checks, request validation, and prediction warnings.
 - JSON, SQLite, Redis-compatible, and SQLAlchemy relational storage paths.
 - One-command workflow orchestration, release verification reporting, and release gate decisioning.
+- CI, changelog, license, citation metadata, and release checklist for v0.1.0 review.
 
 ## Current Limitations
 
@@ -48,6 +60,10 @@ cat reports/portfolio/portfolio_summary.md
 
 ## Reviewer Docs
 
+- `CHANGELOG.md`
+- `LICENSE`
+- `CITATION.cff`
+- `CONTRIBUTING.md`
 - `docs/architecture.md`
 - `docs/operations.md`
 - `docs/system_card.md`

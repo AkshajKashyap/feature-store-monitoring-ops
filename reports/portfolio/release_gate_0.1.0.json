@@ -4,7 +4,7 @@
     "data_quality_passed": true,
     "docker_status": "unavailable: The command 'docker' could not be found in this WSL 2 distro.",
     "drift_warning_count": 8,
-    "p95_latency_ms": 30.451557,
+    "p95_latency_ms": 33.333679,
     "release_gate_in_workflow": true,
     "selected_model": "hist_gradient_boosting",
     "serving_error_rate": 0.166667,

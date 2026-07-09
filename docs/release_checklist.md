@@ -57,6 +57,14 @@ This checklist covers the current local release-style gate for the Feature Store
 - `hold`: required evidence is missing or hard thresholds fail.
 - v0.1.0 is expected to be `warn`, not `pass`, because it is synthetic/local and not production-hosted.
 
+## Final v0.1.0 Tag Readiness
+
+- Ready to tag for portfolio/local-ops review: yes, after final checks pass.
+- Recommended tag: `v0.1.0`.
+- Do not interpret the tag as production readiness.
+- Do not create the tag until explicitly requested.
+- Required final checks: `pytest -q`, `pytest -q -W default`, `ruff check .`, `make release-check`, and `make verify-release`.
+
 ## Intentionally Not Production-Ready Yet
 
 - Docker Compose is local-only and is not a cloud deployment target.

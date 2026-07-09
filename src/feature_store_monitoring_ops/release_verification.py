@@ -125,7 +125,7 @@ def build_release_verification_report(
     limitations = "\n".join(
         [
             "- Synthetic data only; no external production event source is connected.",
-            "- FastAPI serving is local and does not include auth, rate limiting, or cloud deployment.",
+            "- FastAPI serving is local; optional API key auth exists, but full identity, rate limiting, and cloud deployment are out of scope.",
             "- Redis and Postgres paths are optional adapters and are not required by release checks.",
             "- SQLite databases are local development stores, not production warehouses.",
             "- Models are deterministic baselines for system validation, not tuned production forecasts.",

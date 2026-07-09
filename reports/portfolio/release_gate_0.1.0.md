@@ -11,7 +11,7 @@ Operational release gate for the local portfolio release.
 - Selected model: `hist_gradient_boosting`
 - Test MAE: 6.29841
 - Serving error rate: 0.166667
-- Serving p95 latency ms: 30.451557
+- Serving p95 latency ms: 33.333679
 - Successful predictions: 5
 - Drift warning count: 8
 - Storage inspection available: True

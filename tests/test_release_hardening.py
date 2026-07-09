@@ -1,21 +1,22 @@
 from __future__ import annotations
 
-import tomllib
 import json
+import tomllib
 from pathlib import Path
 from typing import Sequence
 
 from typer.testing import CliRunner
 
+from feature_store_monitoring_ops import __version__
 from feature_store_monitoring_ops.cli import app as cli_app
-from feature_store_monitoring_ops.release_verification import (
-    ReleaseCommandResult,
-    generate_release_verification_report,
-)
 from feature_store_monitoring_ops.release_gate import (
     RELEASE_GATE_DECISIONS,
     ReleaseGatePaths,
     run_release_gate,
+)
+from feature_store_monitoring_ops.release_verification import (
+    ReleaseCommandResult,
+    generate_release_verification_report,
 )
 from feature_store_monitoring_ops.workflow import (
     STAGE_PASSED,
@@ -34,6 +35,21 @@ def test_ci_workflow_file_exists_and_runs_release_path() -> None:
     assert "pytest -q -W default" in content
     assert "ruff check ." in content
     assert "feature-store-ops run-demo-workflow" in content
+
+
+def test_version_consistency_for_v010() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    runner = CliRunner()
+
+    version_result = runner.invoke(cli_app, ["--version"])
+    info_result = runner.invoke(cli_app, ["project-info"])
+
+    assert pyproject["project"]["version"] == "0.1.0"
+    assert __version__ == "0.1.0"
+    assert version_result.exit_code == 0
+    assert "0.1.0" in version_result.output
+    assert info_result.exit_code == 0
+    assert "version: 0.1.0" in info_result.output
 
 
 def test_verification_report_generation(tmp_path) -> None:
@@ -110,6 +126,10 @@ def test_warning_filters_are_narrow_not_blanket_ignores() -> None:
 def test_docs_expected_by_readme_exist() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
     expected_docs = (
+        "CHANGELOG.md",
+        "LICENSE",
+        "CITATION.cff",
+        "CONTRIBUTING.md",
         "docs/architecture.md",
         "docs/operations.md",
         "docs/system_card.md",

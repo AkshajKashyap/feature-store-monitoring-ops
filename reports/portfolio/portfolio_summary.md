@@ -10,6 +10,7 @@ This project demonstrates a production-style ML feature store and monitoring sys
 - Online feature materialization with offline/online parity checks.
 - Local FastAPI prediction serving with typed request/response schemas.
 - Durable JSONL telemetry plus SQLite telemetry storage sync.
+- SQLAlchemy relational storage for raw events, offline features, and snapshot metadata.
 - Serving, drift, prediction drift, and data quality monitoring reports.
 - Adapter-level Redis-compatible online feature store interface.
 
@@ -26,6 +27,9 @@ This project demonstrates a production-style ML feature store and monitoring sys
 - Serving error rate: 0.166667
 - Drift warning count: 8
 - SQLite telemetry rows: 6
+- Relational event rows: 720
+- Relational offline feature rows: 595
+- Relational online snapshot rows: 5
 
 ## Reviewer Quickstart
 
@@ -40,7 +44,7 @@ cat reports/portfolio/portfolio_summary.md
 
 - Synthetic data only; no external production data source is connected yet.
 - Redis support is adapter-level unless a Redis server/client is configured.
-- SQLite storage is local development storage, not a production telemetry warehouse.
+- SQLite storage is local development storage, not a production feature or telemetry warehouse.
 - FastAPI serving is local; cloud deployment, auth, and autoscaling are intentionally out of scope.
 - Models are baseline forecasting models intended to validate the system path, not maximize accuracy.
 

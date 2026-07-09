@@ -13,6 +13,9 @@ Portfolio-scale deterministic workflow run with richer temporal and zone coverag
 - Online feature rows: 50
 - Simulated prediction requests: 120
 - SQLite telemetry rows: 120
+- Relational event rows: 3000
+- Relational offline feature rows: 2800
+- Relational online snapshot rows: 50
 
 ## Notes
 

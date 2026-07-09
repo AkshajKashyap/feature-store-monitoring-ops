@@ -1,6 +1,6 @@
 # Workflow Summary
 
-One-command local demo workflow for Milestone 9.
+One-command local demo workflow for the full deterministic system path.
 
 - Overall status: passed
 - Preset: `default`
@@ -19,6 +19,8 @@ One-command local demo workflow for Milestone 9.
 | `monitor_drift` | passed | `reference_rows`=416, `current_rows`=90, `prediction_count`=5, `max_psi`=5.118269 |  |
 | `sync_storage` | passed | `online_feature_row_count`=5, `telemetry_source_row_count`=6, `telemetry_store_row_count`=6, `zone_ids`=['zone_01', 'zone_02', 'zone_03', 'zone_04', 'zone_05'] |  |
 | `inspect_storage` | passed | `online_feature_row_count`=5, `telemetry_row_count`=6, `zone_ids`=['zone_01', 'zone_02', 'zone_03', 'zone_04', 'zone_05'], `min_telemetry_timestamp`=2026-02-01T00:00:00+00:00 |  |
+| `sync_relational_store` | passed | `event_row_count`=720, `offline_feature_row_count`=595, `online_snapshot_row_count`=5, `zone_count`=5 |  |
+| `inspect_relational_store` | passed | `event_row_count`=720, `offline_feature_row_count`=595, `online_snapshot_row_count`=5, `zone_count`=5 |  |
 
 ## Portfolio Outputs
 

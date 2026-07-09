@@ -45,6 +45,9 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_ONLINE_FEATURE_REPORT_PATH,
     DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
     DEFAULT_PREDICTION_LOG_PATH,
+    DEFAULT_RELATIONAL_DB_PATH,
+    DEFAULT_RELATIONAL_STORAGE_INSPECTION_REPORT_PATH,
+    DEFAULT_RELATIONAL_STORAGE_SYNC_REPORT_PATH,
     DEFAULT_PORTFOLIO_SCALE_SUMMARY_PATH,
     DEFAULT_PORTFOLIO_SUMMARY_PATH,
     DEFAULT_SELECTED_MODEL_PATH,
@@ -63,6 +66,10 @@ from feature_store_monitoring_ops.paths import (
     PROJECT_ROOT,
 )
 from feature_store_monitoring_ops.storage.config import StorageConfig
+from feature_store_monitoring_ops.storage.relational import (
+    inspect_relational_store,
+    sync_relational_store,
+)
 from feature_store_monitoring_ops.storage.sync import inspect_storage, sync_storage
 from feature_store_monitoring_ops.synthetic_events import (
     SYNTHETIC_PRESETS,
@@ -129,8 +136,14 @@ def project_info() -> None:
     typer.echo(f"drift_monitoring_report_path: {DEFAULT_DRIFT_MONITORING_REPORT_PATH}")
     typer.echo(f"drift_monitoring_metrics_path: {DEFAULT_DRIFT_MONITORING_METRICS_PATH}")
     typer.echo(f"sqlite_telemetry_db_path: {DEFAULT_SQLITE_TELEMETRY_DB_PATH}")
+    typer.echo(f"relational_db_path: {DEFAULT_RELATIONAL_DB_PATH}")
     typer.echo(f"storage_sync_report_path: {DEFAULT_STORAGE_SYNC_REPORT_PATH}")
     typer.echo(f"storage_inspection_report_path: {DEFAULT_STORAGE_INSPECTION_REPORT_PATH}")
+    typer.echo(f"relational_storage_sync_report_path: {DEFAULT_RELATIONAL_STORAGE_SYNC_REPORT_PATH}")
+    typer.echo(
+        "relational_storage_inspection_report_path: "
+        f"{DEFAULT_RELATIONAL_STORAGE_INSPECTION_REPORT_PATH}",
+    )
     typer.echo(f"workflow_summary_path: {DEFAULT_WORKFLOW_SUMMARY_PATH}")
     typer.echo(f"workflow_results_path: {DEFAULT_WORKFLOW_RESULTS_PATH}")
     typer.echo(f"portfolio_summary_path: {DEFAULT_PORTFOLIO_SUMMARY_PATH}")
@@ -755,6 +768,84 @@ def inspect_storage_command(
     typer.echo(f"min telemetry timestamp: {result.min_telemetry_timestamp or 'n/a'}")
     typer.echo(f"max telemetry timestamp: {result.max_telemetry_timestamp or 'n/a'}")
     typer.echo(f"wrote storage inspection report to {result.report_path}")
+
+
+@app.command("sync-relational-store")
+def sync_relational_store_command(
+    events_path: Annotated[
+        Path,
+        typer.Option("--events-path", help="CSV path for synthetic temporal events."),
+    ] = DEFAULT_SYNTHETIC_EVENTS_PATH,
+    offline_features_path: Annotated[
+        Path,
+        typer.Option("--offline-features-path", help="Parquet path for all offline feature rows."),
+    ] = DEFAULT_OFFLINE_FEATURES_PATH,
+    online_snapshot_path: Annotated[
+        Path,
+        typer.Option("--online-snapshot-path", help="JSON path for online feature snapshot."),
+    ] = DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown relational storage sync report path."),
+    ] = DEFAULT_RELATIONAL_STORAGE_SYNC_REPORT_PATH,
+    database_url: Annotated[
+        str | None,
+        typer.Option(
+            "--database-url",
+            help="SQLAlchemy database URL. Defaults to FEATURE_STORE_OPS_RELATIONAL_URL or SQLite.",
+        ),
+    ] = None,
+) -> None:
+    """Sync generated events and feature artifacts into relational storage."""
+
+    try:
+        result = sync_relational_store(
+            database_url=database_url,
+            events_path=events_path,
+            offline_features_path=offline_features_path,
+            online_snapshot_path=online_snapshot_path,
+            report_path=report_path,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"relational backend: {result.database_backend}")
+    typer.echo(f"event rows: {result.event_row_count}")
+    typer.echo(f"offline feature rows: {result.offline_feature_row_count}")
+    typer.echo(f"online snapshot rows: {result.online_snapshot_row_count}")
+    typer.echo(f"zone count: {result.zone_count}")
+    typer.echo(f"wrote relational storage sync report to {result.report_path}")
+
+
+@app.command("inspect-relational-store")
+def inspect_relational_store_command(
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown relational storage inspection report path."),
+    ] = DEFAULT_RELATIONAL_STORAGE_INSPECTION_REPORT_PATH,
+    database_url: Annotated[
+        str | None,
+        typer.Option(
+            "--database-url",
+            help="SQLAlchemy database URL. Defaults to FEATURE_STORE_OPS_RELATIONAL_URL or SQLite.",
+        ),
+    ] = None,
+) -> None:
+    """Inspect relational event and feature storage."""
+
+    try:
+        result = inspect_relational_store(database_url=database_url, report_path=report_path)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"relational backend: {result.database_backend}")
+    typer.echo(f"event row count: {result.event_row_count}")
+    typer.echo(f"offline feature row count: {result.offline_feature_row_count}")
+    typer.echo(f"online snapshot row count: {result.online_snapshot_row_count}")
+    typer.echo(f"zone count: {result.zone_count}")
+    typer.echo(f"min event timestamp: {result.min_event_timestamp or 'n/a'}")
+    typer.echo(f"max event timestamp: {result.max_event_timestamp or 'n/a'}")
+    typer.echo(f"wrote relational storage inspection report to {result.report_path}")
 
 
 @app.command("run-demo-workflow")

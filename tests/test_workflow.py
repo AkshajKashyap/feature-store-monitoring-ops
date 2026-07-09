@@ -29,6 +29,8 @@ def test_workflow_stage_ordering() -> None:
         "monitor_drift",
         "sync_storage",
         "inspect_storage",
+        "sync_relational_store",
+        "inspect_relational_store",
     )
 
 
@@ -73,6 +75,8 @@ def test_workflow_writes_markdown_and_json_reports(tmp_path) -> None:
     assert payload["status"] == STAGE_PASSED
     assert [stage["name"] for stage in payload["stages"]] == list(WORKFLOW_STAGE_ORDER)
     assert all(stage["status"] == STAGE_PASSED for stage in payload["stages"])
+    assert (tmp_path / "reports" / "relational_storage_sync_summary.md").exists()
+    assert (tmp_path / "reports" / "relational_storage_inspection_summary.md").exists()
 
 
 def test_run_demo_workflow_cli_smoke_behavior(tmp_path) -> None:
@@ -94,6 +98,8 @@ def test_run_demo_workflow_cli_smoke_behavior(tmp_path) -> None:
     assert result.exit_code == 0
     assert "workflow status: passed" in result.output
     assert "generate_synthetic_events: passed" in result.output
+    assert "sync_relational_store: passed" in result.output
+    assert "inspect_relational_store: passed" in result.output
     assert (tmp_path / "reports" / "portfolio" / "workflow_summary.md").exists()
     assert (tmp_path / "reports" / "portfolio" / "workflow_results.json").exists()
     assert (tmp_path / "reports" / "portfolio" / "portfolio_summary.md").exists()
@@ -123,6 +129,17 @@ def test_workflow_accepts_portfolio_preset_and_increases_online_rows(tmp_path) -
     assert materialize_stage["metrics"]["row_count"] > 5
     assert traffic_stage["metrics"]["total_requests"] == 12
     assert (tmp_path / "reports" / "portfolio" / "portfolio_scale_summary.md").exists()
+
+
+def test_workflow_includes_relational_storage_stages() -> None:
+    assert "sync_relational_store" in WORKFLOW_STAGE_ORDER
+    assert "inspect_relational_store" in WORKFLOW_STAGE_ORDER
+    assert WORKFLOW_STAGE_ORDER.index("sync_relational_store") > WORKFLOW_STAGE_ORDER.index(
+        "inspect_storage",
+    )
+    assert WORKFLOW_STAGE_ORDER.index("inspect_relational_store") > WORKFLOW_STAGE_ORDER.index(
+        "sync_relational_store",
+    )
 
 
 def test_makefile_target_names_exist() -> None:

@@ -31,9 +31,16 @@ DEFAULT_SERVING_MONITORING_METRICS_PATH = PROJECT_ROOT / "reports" / "serving_mo
 DEFAULT_DRIFT_MONITORING_REPORT_PATH = PROJECT_ROOT / "reports" / "drift_monitoring_summary.md"
 DEFAULT_DRIFT_MONITORING_METRICS_PATH = PROJECT_ROOT / "reports" / "drift_monitoring_metrics.json"
 DEFAULT_SQLITE_TELEMETRY_DB_PATH = PROJECT_ROOT / "artifacts" / "storage" / "telemetry.db"
+DEFAULT_RELATIONAL_DB_PATH = PROJECT_ROOT / "artifacts" / "storage" / "feature_store.db"
 DEFAULT_STORAGE_SYNC_REPORT_PATH = PROJECT_ROOT / "reports" / "storage_sync_summary.md"
 DEFAULT_STORAGE_INSPECTION_REPORT_PATH = (
     PROJECT_ROOT / "reports" / "storage_inspection_summary.md"
+)
+DEFAULT_RELATIONAL_STORAGE_SYNC_REPORT_PATH = (
+    PROJECT_ROOT / "reports" / "relational_storage_sync_summary.md"
+)
+DEFAULT_RELATIONAL_STORAGE_INSPECTION_REPORT_PATH = (
+    PROJECT_ROOT / "reports" / "relational_storage_inspection_summary.md"
 )
 DEFAULT_WORKFLOW_SUMMARY_PATH = PROJECT_ROOT / "reports" / "portfolio" / "workflow_summary.md"
 DEFAULT_WORKFLOW_RESULTS_PATH = PROJECT_ROOT / "reports" / "portfolio" / "workflow_results.json"
@@ -55,6 +62,9 @@ __all__ = [
     "DEFAULT_OFFLINE_FEATURE_REPORT_PATH",
     "DEFAULT_OFFLINE_FEATURES_PATH",
     "DEFAULT_PREDICTION_LOG_PATH",
+    "DEFAULT_RELATIONAL_DB_PATH",
+    "DEFAULT_RELATIONAL_STORAGE_INSPECTION_REPORT_PATH",
+    "DEFAULT_RELATIONAL_STORAGE_SYNC_REPORT_PATH",
     "DEFAULT_SELECTED_MODEL_PATH",
     "DEFAULT_SERVING_MONITORING_METRICS_PATH",
     "DEFAULT_SERVING_MONITORING_REPORT_PATH",

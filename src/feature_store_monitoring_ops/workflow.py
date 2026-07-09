@@ -28,6 +28,10 @@ from feature_store_monitoring_ops.monitoring.telemetry import (
 )
 from feature_store_monitoring_ops.paths import PROJECT_ROOT
 from feature_store_monitoring_ops.storage.config import StorageConfig
+from feature_store_monitoring_ops.storage.relational import (
+    inspect_relational_store,
+    sync_relational_store,
+)
 from feature_store_monitoring_ops.storage.sync import inspect_storage, sync_storage
 from feature_store_monitoring_ops.synthetic_events import (
     DEFAULT_SYNTHETIC_PRESET,
@@ -49,6 +53,8 @@ WORKFLOW_STAGE_ORDER: tuple[str, ...] = (
     "monitor_drift",
     "sync_storage",
     "inspect_storage",
+    "sync_relational_store",
+    "inspect_relational_store",
 )
 
 STAGE_PASSED = "passed"
@@ -205,6 +211,14 @@ class DemoWorkflowConfig:
         return self.output_root / "reports" / "storage_inspection_summary.md"
 
     @property
+    def relational_storage_sync_report_path(self) -> Path:
+        return self.output_root / "reports" / "relational_storage_sync_summary.md"
+
+    @property
+    def relational_storage_inspection_report_path(self) -> Path:
+        return self.output_root / "reports" / "relational_storage_inspection_summary.md"
+
+    @property
     def workflow_summary_path(self) -> Path:
         return self.output_root / "reports" / "portfolio" / "workflow_summary.md"
 
@@ -224,10 +238,17 @@ class DemoWorkflowConfig:
     def sqlite_path(self) -> Path:
         return self.output_root / "artifacts" / "storage" / "telemetry.db"
 
+    @property
+    def relational_database_url(self) -> str:
+        return f"sqlite:///{self.output_root / 'artifacts' / 'storage' / 'feature_store.db'}"
+
     def resolved_storage_config(self) -> StorageConfig:
         """Return storage config scoped to this workflow output root."""
 
-        return self.storage_config.with_overrides(sqlite_path=self.sqlite_path)
+        return self.storage_config.with_overrides(
+            sqlite_path=self.sqlite_path,
+            relational_url=self.relational_database_url,
+        )
 
     def synthetic_event_config(self) -> SyntheticEventConfig:
         """Return the synthetic event generator config for this workflow."""
@@ -372,7 +393,7 @@ def build_workflow_summary(result: DemoWorkflowResult) -> str:
         [
             "# Workflow Summary",
             "",
-            "One-command local demo workflow for Milestone 9.",
+            "One-command local demo workflow for the full deterministic system path.",
             "",
             f"- Overall status: {result.status}",
             f"- Preset: `{result.preset}`",
@@ -403,6 +424,7 @@ def build_portfolio_summary(result: DemoWorkflowResult) -> str:
             "- Online feature materialization with offline/online parity checks.",
             "- Local FastAPI prediction serving with typed request/response schemas.",
             "- Durable JSONL telemetry plus SQLite telemetry storage sync.",
+            "- SQLAlchemy relational storage for raw events, offline features, and snapshot metadata.",
             "- Serving, drift, prediction drift, and data quality monitoring reports.",
             "- Adapter-level Redis-compatible online feature store interface.",
         ],
@@ -421,7 +443,7 @@ def build_portfolio_summary(result: DemoWorkflowResult) -> str:
         [
             "- Synthetic data only; no external production data source is connected yet.",
             "- Redis support is adapter-level unless a Redis server/client is configured.",
-            "- SQLite storage is local development storage, not a production telemetry warehouse.",
+            "- SQLite storage is local development storage, not a production feature or telemetry warehouse.",
             "- FastAPI serving is local; cloud deployment, auth, and autoscaling are intentionally out of scope.",
             "- Models are baseline forecasting models intended to validate the system path, not maximize accuracy.",
         ],
@@ -452,6 +474,11 @@ def build_portfolio_summary(result: DemoWorkflowResult) -> str:
             f"- Serving error rate: {_format_optional_metric(metrics.get('serving_error_rate'))}",
             f"- Drift warning count: {_format_optional_metric(metrics.get('drift_warnings'))}",
             f"- SQLite telemetry rows: {_format_optional_metric(metrics.get('telemetry_rows'))}",
+            f"- Relational event rows: {_format_optional_metric(metrics.get('relational_event_rows'))}",
+            f"- Relational offline feature rows: "
+            f"{_format_optional_metric(metrics.get('relational_offline_feature_rows'))}",
+            f"- Relational online snapshot rows: "
+            f"{_format_optional_metric(metrics.get('relational_online_snapshot_rows'))}",
             "",
             "## Reviewer Quickstart",
             "",
@@ -503,6 +530,11 @@ def build_portfolio_scale_summary(result: DemoWorkflowResult) -> str:
             f"- Simulated prediction requests: "
             f"{_format_optional_metric(metrics.get('simulated_requests'))}",
             f"- SQLite telemetry rows: {_format_optional_metric(metrics.get('telemetry_rows'))}",
+            f"- Relational event rows: {_format_optional_metric(metrics.get('relational_event_rows'))}",
+            f"- Relational offline feature rows: "
+            f"{_format_optional_metric(metrics.get('relational_offline_feature_rows'))}",
+            f"- Relational online snapshot rows: "
+            f"{_format_optional_metric(metrics.get('relational_online_snapshot_rows'))}",
             "",
             "## Notes",
             "",
@@ -525,6 +557,8 @@ def _stage_functions() -> list[tuple[str, Callable[[DemoWorkflowConfig], Workflo
         ("monitor_drift", _stage_monitor_drift),
         ("sync_storage", _stage_sync_storage),
         ("inspect_storage", _stage_inspect_storage),
+        ("sync_relational_store", _stage_sync_relational_store),
+        ("inspect_relational_store", _stage_inspect_relational_store),
     ]
 
 
@@ -771,6 +805,52 @@ def _stage_inspect_storage(config: DemoWorkflowConfig) -> WorkflowStageResult:
     )
 
 
+def _stage_sync_relational_store(config: DemoWorkflowConfig) -> WorkflowStageResult:
+    result = sync_relational_store(
+        database_url=config.relational_database_url,
+        events_path=config.synthetic_events_path,
+        offline_features_path=config.offline_features_path,
+        online_snapshot_path=config.online_feature_snapshot_path,
+        report_path=config.relational_storage_sync_report_path,
+    )
+    return WorkflowStageResult(
+        name="sync_relational_store",
+        status=STAGE_PASSED,
+        output_paths={
+            "summary_report": str(result.report_path),
+            "database": config.relational_database_url,
+        },
+        metrics={
+            "event_row_count": result.event_row_count,
+            "offline_feature_row_count": result.offline_feature_row_count,
+            "online_snapshot_row_count": result.online_snapshot_row_count,
+            "zone_count": result.zone_count,
+            "database_backend": result.database_backend,
+        },
+    )
+
+
+def _stage_inspect_relational_store(config: DemoWorkflowConfig) -> WorkflowStageResult:
+    result = inspect_relational_store(
+        database_url=config.relational_database_url,
+        report_path=config.relational_storage_inspection_report_path,
+    )
+    return WorkflowStageResult(
+        name="inspect_relational_store",
+        status=STAGE_PASSED,
+        output_paths={"summary_report": str(result.report_path)},
+        metrics={
+            "event_row_count": result.event_row_count,
+            "offline_feature_row_count": result.offline_feature_row_count,
+            "online_snapshot_row_count": result.online_snapshot_row_count,
+            "zone_count": result.zone_count,
+            "database_backend": result.database_backend,
+            "min_event_timestamp": result.min_event_timestamp,
+            "max_event_timestamp": result.max_event_timestamp,
+        },
+    )
+
+
 def _write_workflow_reports(result: DemoWorkflowResult, config: DemoWorkflowConfig) -> None:
     config.workflow_summary_path.parent.mkdir(parents=True, exist_ok=True)
     config.workflow_summary_path.write_text(build_workflow_summary(result), encoding="utf-8")
@@ -821,6 +901,14 @@ def _final_metrics(result: DemoWorkflowResult) -> dict[str, Any]:
             metrics["drift_warnings"] = stage.metrics.get("warnings")
         elif stage.name == "inspect_storage":
             metrics["telemetry_rows"] = stage.metrics.get("telemetry_row_count")
+        elif stage.name == "inspect_relational_store":
+            metrics["relational_event_rows"] = stage.metrics.get("event_row_count")
+            metrics["relational_offline_feature_rows"] = stage.metrics.get(
+                "offline_feature_row_count",
+            )
+            metrics["relational_online_snapshot_rows"] = stage.metrics.get(
+                "online_snapshot_row_count",
+            )
     return metrics
 
 

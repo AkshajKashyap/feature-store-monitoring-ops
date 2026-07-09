@@ -16,6 +16,8 @@ This checklist covers the current local release-style gate for the Feature Store
 - Serving monitoring, drift monitoring, and data quality reports are generated.
 - Online feature and telemetry artifacts are synced into configured local storage backends.
 - Storage inspection confirms online feature row count, telemetry row count, zone IDs, and telemetry timestamp bounds.
+- Synthetic events, offline features, and online snapshot metadata are synced into relational SQLAlchemy storage.
+- Relational storage inspection confirms event row count, offline feature row count, online snapshot row count, zone count, and event timestamp bounds.
 - Portfolio workflow and summary reports are written under `reports/portfolio/`.
 
 ## Optional Docker Checks
@@ -26,6 +28,7 @@ This checklist covers the current local release-style gate for the Feature Store
 - Docker smoke checks `/health`, `/model`, `/predict`, and `/metrics` over localhost.
 - Docker smoke writes `reports/portfolio/docker_smoke_summary.md`.
 - Docker Compose is shut down cleanly by the smoke script.
+- Docker Compose includes an optional `postgres` profile for relational storage experiments.
 
 ## Optional Portfolio-Scale Check
 
@@ -37,8 +40,9 @@ This checklist covers the current local release-style gate for the Feature Store
 
 - Docker Compose is local-only and is not a cloud deployment target.
 - No Postgres or cloud services are required by default.
+- Postgres support is SQLAlchemy URL-compatible, but live Postgres operation is optional and not required by tests.
 - Redis support is included for Docker/local adapter smoke testing, not managed production Redis.
-- SQLite telemetry storage is local durable storage, not a production telemetry warehouse.
+- SQLite telemetry and feature-store databases are local durable storage, not production warehouses.
 - The model is a baseline forecaster intended to validate the system path, not a tuned production model.
 - Authentication, authorization, rate limiting, and network deployment hardening are not implemented yet.
 - Monitoring thresholds are local defaults and are not tied to incident response or alert routing.

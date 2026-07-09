@@ -10,6 +10,7 @@ services:
       FEATURE_STORE_OPS_TELEMETRY_BACKEND: ${FEATURE_STORE_OPS_TELEMETRY_BACKEND:-jsonl}
       FEATURE_STORE_OPS_REDIS_URL: ${FEATURE_STORE_OPS_REDIS_URL:-redis://redis:6379/0}
       FEATURE_STORE_OPS_SQLITE_PATH: /app/artifacts/storage/telemetry.db
+      FEATURE_STORE_OPS_RELATIONAL_URL: ${FEATURE_STORE_OPS_RELATIONAL_URL:-sqlite:////app/artifacts/storage/feature_store.db}
     ports:
       - "8000:8000"
     volumes:
@@ -25,3 +26,19 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+
+  postgres:
+    image: postgres:16-alpine
+    profiles:
+      - postgres
+    environment:
+      POSTGRES_USER: feature_store_ops
+      POSTGRES_PASSWORD: feature_store_ops
+      POSTGRES_DB: feature_store_ops
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

@@ -12,8 +12,8 @@ Offline monitoring over persisted local prediction telemetry for Milestone 6.
 - Successful predictions: 5
 - Failed predictions: 1
 - Error rate: 0.167
-- Average latency ms: 5.221601
-- P95 latency ms: 8.930342
+- Average latency ms: 8.924492
+- P95 latency ms: 13.926304
 - Mean prediction: 28.197380
 - Min prediction: 20.803178
 - Max prediction: 34.800668

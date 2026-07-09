@@ -404,6 +404,8 @@ The workflow runs:
 - Drift and data quality monitoring
 - Storage sync
 - Storage inspection
+- Relational event/feature storage sync
+- Relational storage inspection
 
 It writes tracked portfolio outputs:
 
@@ -489,3 +491,53 @@ feature-store-ops generate-synthetic-events --zones 10 --days 7 --events-per-zon
 ```
 
 Generated data, model artifacts, logs, SQLite databases, and Redis dumps remain ignored by git. Tracked Markdown/JSON reports under `reports/` are kept for review.
+
+## Milestone 12: Relational Event And Feature Storage
+
+This milestone adds a DBMS-style SQLAlchemy layer for synthetic events, offline feature rows, and online feature snapshot metadata. SQLite is the default local backend; Postgres-compatible SQLAlchemy URLs are supported when a Postgres driver/server is configured.
+
+### Sync And Inspect Relational Storage
+
+```bash
+feature-store-ops generate-synthetic-events
+feature-store-ops build-offline-features
+feature-store-ops materialize-online-features
+feature-store-ops sync-relational-store
+feature-store-ops inspect-relational-store
+```
+
+The relational sync reads:
+
+- `data/processed/synthetic_events.csv`
+- `data/processed/offline_features.parquet`
+- `artifacts/online_features/latest_features.json`
+
+It writes ignored local storage:
+
+- `artifacts/storage/feature_store.db`
+
+It writes tracked reports:
+
+- `reports/relational_storage_sync_summary.md`
+- `reports/relational_storage_inspection_summary.md`
+
+Tables:
+
+- `events`
+- `offline_features`
+- `online_feature_snapshots`
+- `storage_run_metadata`
+
+Configuration:
+
+- `FEATURE_STORE_OPS_RELATIONAL_URL`: defaults to local SQLite at `artifacts/storage/feature_store.db`
+- Example Postgres URL: `postgresql+psycopg://user:password@localhost:5432/feature_store`
+
+The demo workflow now includes relational sync and inspection:
+
+```bash
+feature-store-ops run-demo-workflow
+feature-store-ops run-demo-workflow --preset portfolio
+```
+
+Docker Compose includes an optional `postgres` profile for local experimentation, but normal tests and `make release-check` do not require Postgres.

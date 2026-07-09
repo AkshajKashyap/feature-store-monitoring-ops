@@ -15,7 +15,9 @@
     "monitor_serving",
     "monitor_drift",
     "sync_storage",
-    "inspect_storage"
+    "inspect_storage",
+    "sync_relational_store",
+    "inspect_relational_store"
   ],
   "stages": [
     {
@@ -192,6 +194,39 @@
       "name": "inspect_storage",
       "output_paths": {
         "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/storage_inspection_summary.md"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "database_backend": "sqlite",
+        "event_row_count": 720,
+        "offline_feature_row_count": 595,
+        "online_snapshot_row_count": 5,
+        "zone_count": 5
+      },
+      "name": "sync_relational_store",
+      "output_paths": {
+        "database": "sqlite:////home/akshaj/Building/feature-store-monitoring-ops/artifacts/storage/feature_store.db",
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/relational_storage_sync_summary.md"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "database_backend": "sqlite",
+        "event_row_count": 720,
+        "max_event_timestamp": "2026-01-30T23:00:00+00:00",
+        "min_event_timestamp": "2026-01-01T00:00:00+00:00",
+        "offline_feature_row_count": 595,
+        "online_snapshot_row_count": 5,
+        "zone_count": 5
+      },
+      "name": "inspect_relational_store",
+      "output_paths": {
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/relational_storage_inspection_summary.md"
       },
       "status": "passed"
     }

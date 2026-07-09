@@ -10,6 +10,7 @@ from typing import Any
 from feature_store_monitoring_ops.paths import (
     DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
     DEFAULT_PREDICTION_LOG_PATH,
+    DEFAULT_RELATIONAL_DB_PATH,
     DEFAULT_SQLITE_TELEMETRY_DB_PATH,
 )
 from feature_store_monitoring_ops.storage.online import (
@@ -28,6 +29,8 @@ ONLINE_BACKEND_ENV = "FEATURE_STORE_OPS_ONLINE_BACKEND"
 TELEMETRY_BACKEND_ENV = "FEATURE_STORE_OPS_TELEMETRY_BACKEND"
 SQLITE_PATH_ENV = "FEATURE_STORE_OPS_SQLITE_PATH"
 REDIS_URL_ENV = "FEATURE_STORE_OPS_REDIS_URL"
+RELATIONAL_URL_ENV = "FEATURE_STORE_OPS_RELATIONAL_URL"
+DEFAULT_RELATIONAL_DATABASE_URL = f"sqlite:///{DEFAULT_RELATIONAL_DB_PATH}"
 
 ONLINE_BACKENDS: tuple[str, ...] = ("json", "memory", "redis")
 TELEMETRY_BACKENDS: tuple[str, ...] = ("jsonl", "sqlite")
@@ -41,6 +44,7 @@ class StorageConfig:
     telemetry_backend: str = "sqlite"
     sqlite_path: Path = DEFAULT_SQLITE_TELEMETRY_DB_PATH
     redis_url: str = "redis://localhost:6379/0"
+    relational_url: str = DEFAULT_RELATIONAL_DATABASE_URL
 
     @classmethod
     def from_env(cls) -> StorageConfig:
@@ -51,6 +55,7 @@ class StorageConfig:
             telemetry_backend=os.getenv(TELEMETRY_BACKEND_ENV, cls.telemetry_backend),
             sqlite_path=Path(os.getenv(SQLITE_PATH_ENV, str(cls.sqlite_path))),
             redis_url=os.getenv(REDIS_URL_ENV, cls.redis_url),
+            relational_url=os.getenv(RELATIONAL_URL_ENV, cls.relational_url),
         ).validated()
 
     def with_overrides(
@@ -60,6 +65,7 @@ class StorageConfig:
         telemetry_backend: str | None = None,
         sqlite_path: Path | None = None,
         redis_url: str | None = None,
+        relational_url: str | None = None,
     ) -> StorageConfig:
         """Return a validated copy with optional CLI overrides."""
 
@@ -68,6 +74,7 @@ class StorageConfig:
             telemetry_backend=telemetry_backend or self.telemetry_backend,
             sqlite_path=sqlite_path or self.sqlite_path,
             redis_url=redis_url or self.redis_url,
+            relational_url=relational_url or self.relational_url,
         ).validated()
 
     def validated(self) -> StorageConfig:
@@ -117,9 +124,11 @@ __all__ = [
     "ONLINE_BACKENDS",
     "ONLINE_BACKEND_ENV",
     "REDIS_URL_ENV",
+    "RELATIONAL_URL_ENV",
     "SQLITE_PATH_ENV",
     "TELEMETRY_BACKENDS",
     "TELEMETRY_BACKEND_ENV",
+    "DEFAULT_RELATIONAL_DATABASE_URL",
     "StorageConfig",
     "build_online_feature_store",
     "build_prediction_telemetry_store",

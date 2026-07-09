@@ -24,7 +24,7 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
     DEFAULT_SELECTED_MODEL_PATH,
 )
-from feature_store_monitoring_ops.storage.online import JsonBackedOnlineFeatureStore
+from feature_store_monitoring_ops.storage.online import JsonBackedOnlineFeatureStore, OnlineFeatureStore
 
 
 @dataclass
@@ -76,7 +76,7 @@ class ServingContext:
     model: Any | None = None
     model_manifest: dict[str, Any] = field(default_factory=dict)
     feature_manifest: dict[str, Any] = field(default_factory=dict)
-    feature_store: JsonBackedOnlineFeatureStore | None = None
+    feature_store: OnlineFeatureStore | None = None
     load_errors: list[str] = field(default_factory=list)
 
     @property
@@ -100,7 +100,11 @@ class ServingContext:
         return str(self.model_manifest.get("model_version", __version__))
 
 
-def load_serving_context(artifacts: ServingArtifacts | None = None) -> ServingContext:
+def load_serving_context(
+    artifacts: ServingArtifacts | None = None,
+    *,
+    feature_store: OnlineFeatureStore | None = None,
+) -> ServingContext:
     """Load model and online feature artifacts without crashing on missing files."""
 
     active_artifacts = artifacts or ServingArtifacts()
@@ -108,7 +112,7 @@ def load_serving_context(artifacts: ServingArtifacts | None = None) -> ServingCo
     _load_model(context)
     _load_model_manifest(context)
     _load_feature_manifest(context)
-    _load_feature_store(context)
+    _load_feature_store(context, feature_store=feature_store)
     _validate_manifest_contract(context)
     return context
 
@@ -259,7 +263,21 @@ def _load_feature_manifest(context: ServingContext) -> None:
     )
 
 
-def _load_feature_store(context: ServingContext) -> None:
+def _load_feature_store(
+    context: ServingContext,
+    *,
+    feature_store: OnlineFeatureStore | None = None,
+) -> None:
+    if feature_store is not None:
+        try:
+            rows = feature_store.all_rows()
+            validate_online_feature_rows(rows)
+        except ValueError as exc:
+            context.load_errors.append(f"invalid online feature store: {exc}")
+            return
+        context.feature_store = feature_store
+        return
+
     if not context.artifacts.feature_snapshot_path.exists():
         context.load_errors.append(
             f"missing online feature snapshot: {context.artifacts.feature_snapshot_path}",

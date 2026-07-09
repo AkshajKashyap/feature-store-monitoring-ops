@@ -322,3 +322,44 @@ Prediction drift compares recent successful prediction logs with the selected mo
 Data quality checks validate required feature columns, missing model inputs, duplicate entity/as-of rows, nonnegative lag/rolling demand features, and timestamp parsing.
 
 Warnings are emitted for high PSI, missing feature values, lost zone coverage, large prediction mean shift, too few prediction logs, and data quality failures.
+
+## Milestone 8: Durable Storage Adapters
+
+This milestone adds storage interfaces for online features and prediction telemetry. Defaults remain local and testable: online features stay JSON-backed, while prediction telemetry can be synced from JSONL into SQLite.
+
+### Sync And Inspect Storage
+
+```bash
+feature-store-ops generate-synthetic-events
+feature-store-ops build-offline-features
+feature-store-ops train-model
+feature-store-ops materialize-online-features
+feature-store-ops simulate-traffic
+feature-store-ops monitor-serving
+feature-store-ops monitor-drift
+feature-store-ops sync-storage
+feature-store-ops inspect-storage
+```
+
+Storage sync reads:
+
+- `artifacts/online_features/latest_features.json`
+- `logs/predictions.jsonl`
+
+It writes local ignored storage:
+
+- `artifacts/storage/telemetry.db`
+
+It writes tracked reports:
+
+- `reports/storage_sync_summary.md`
+- `reports/storage_inspection_summary.md`
+
+Storage configuration can come from CLI options or environment variables:
+
+- `FEATURE_STORE_OPS_ONLINE_BACKEND`: `json`, `memory`, or `redis`
+- `FEATURE_STORE_OPS_TELEMETRY_BACKEND`: `jsonl` or `sqlite`
+- `FEATURE_STORE_OPS_SQLITE_PATH`: SQLite telemetry database path
+- `FEATURE_STORE_OPS_REDIS_URL`: Redis URL for the Redis adapter
+
+Redis support is adapter-level only at this milestone. Tests use an injected fake client, and local runs do not require Redis unless `redis` is selected and a Redis client/server is configured.

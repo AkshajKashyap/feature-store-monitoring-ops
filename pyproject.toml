@@ -15,6 +15,7 @@ dependencies = [
     "pandas",
     "pyarrow",
     "scikit-learn",
+    "sqlalchemy>=2.0,<3.0",
     "typer",
     "uvicorn>=0.30,<0.31",
 ]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -10,6 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from feature_store_monitoring_ops.paths import DEFAULT_PREDICTION_LOG_PATH
+from feature_store_monitoring_ops.storage.telemetry import (
+    JsonlPredictionTelemetryStore,
+    PredictionTelemetryStore,
+)
 
 
 def utc_now() -> datetime:
@@ -39,6 +42,7 @@ class PredictionTelemetryLogger:
     now_fn: Callable[[], datetime] = utc_now
     request_counter: int = 0
     rows_written: int = 0
+    store: PredictionTelemetryStore | None = None
 
     def next_request_id(self) -> str:
         """Return a deterministic request ID for this logger instance."""
@@ -111,9 +115,8 @@ class PredictionTelemetryLogger:
     def write_row(self, row: dict[str, Any]) -> None:
         """Append one telemetry row to JSONL."""
 
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.log_path.open("a", encoding="utf-8") as file:
-            file.write(json.dumps(row, sort_keys=True) + "\n")
+        active_store = self.store or JsonlPredictionTelemetryStore(log_path=self.log_path)
+        active_store.append(row)
         self.rows_written += 1
 
 
@@ -131,13 +134,7 @@ class TelemetrySimulationResult:
 def read_prediction_logs(path: Path = DEFAULT_PREDICTION_LOG_PATH) -> list[dict[str, Any]]:
     """Read prediction telemetry JSONL rows."""
 
-    if not path.exists():
-        return []
-    rows: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            rows.append(json.loads(line))
-    return rows
+    return JsonlPredictionTelemetryStore(log_path=path).all_rows()
 
 
 def reset_prediction_log(path: Path = DEFAULT_PREDICTION_LOG_PATH) -> None:

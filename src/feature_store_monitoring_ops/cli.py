@@ -48,6 +48,9 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_SELECTED_MODEL_PATH,
     DEFAULT_SERVING_MONITORING_METRICS_PATH,
     DEFAULT_SERVING_MONITORING_REPORT_PATH,
+    DEFAULT_SQLITE_TELEMETRY_DB_PATH,
+    DEFAULT_STORAGE_INSPECTION_REPORT_PATH,
+    DEFAULT_STORAGE_SYNC_REPORT_PATH,
     DEFAULT_SYNTHETIC_EVENTS_PATH,
     DEFAULT_SYNTHETIC_REPORT_PATH,
     DEFAULT_TEST_FEATURES_PATH,
@@ -55,6 +58,8 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_VALIDATION_FEATURES_PATH,
     PROJECT_ROOT,
 )
+from feature_store_monitoring_ops.storage.config import StorageConfig
+from feature_store_monitoring_ops.storage.sync import inspect_storage, sync_storage
 from feature_store_monitoring_ops.synthetic_events import (
     SyntheticEventConfig,
     generate_and_save_synthetic_events,
@@ -117,6 +122,9 @@ def project_info() -> None:
     typer.echo(f"serving_monitoring_metrics_path: {DEFAULT_SERVING_MONITORING_METRICS_PATH}")
     typer.echo(f"drift_monitoring_report_path: {DEFAULT_DRIFT_MONITORING_REPORT_PATH}")
     typer.echo(f"drift_monitoring_metrics_path: {DEFAULT_DRIFT_MONITORING_METRICS_PATH}")
+    typer.echo(f"sqlite_telemetry_db_path: {DEFAULT_SQLITE_TELEMETRY_DB_PATH}")
+    typer.echo(f"storage_sync_report_path: {DEFAULT_STORAGE_SYNC_REPORT_PATH}")
+    typer.echo(f"storage_inspection_report_path: {DEFAULT_STORAGE_INSPECTION_REPORT_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -597,11 +605,142 @@ def monitor_drift_command(
     typer.echo(f"wrote drift monitoring metrics to {result.metrics_path}")
 
 
+@app.command("sync-storage")
+def sync_storage_command(
+    feature_snapshot_path: Annotated[
+        Path,
+        typer.Option("--feature-snapshot-path", help="JSON path for online feature snapshot."),
+    ] = DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
+    telemetry_log_path: Annotated[
+        Path,
+        typer.Option("--telemetry-log-path", help="JSONL prediction telemetry log path."),
+    ] = DEFAULT_PREDICTION_LOG_PATH,
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown storage sync report path."),
+    ] = DEFAULT_STORAGE_SYNC_REPORT_PATH,
+    online_backend: Annotated[
+        str | None,
+        typer.Option("--online-backend", help="Online feature backend: json, memory, or redis."),
+    ] = None,
+    telemetry_backend: Annotated[
+        str | None,
+        typer.Option("--telemetry-backend", help="Telemetry backend: jsonl or sqlite."),
+    ] = None,
+    sqlite_path: Annotated[
+        Path | None,
+        typer.Option("--sqlite-path", help="SQLite telemetry database path."),
+    ] = None,
+    redis_url: Annotated[
+        str | None,
+        typer.Option("--redis-url", help="Redis URL for the Redis online feature adapter."),
+    ] = None,
+) -> None:
+    """Sync local feature and telemetry artifacts into configured storage backends."""
+
+    try:
+        config = _storage_config_from_options(
+            online_backend=online_backend,
+            telemetry_backend=telemetry_backend,
+            sqlite_path=sqlite_path,
+            redis_url=redis_url,
+        )
+        result = sync_storage(
+            config=config,
+            feature_snapshot_path=feature_snapshot_path,
+            telemetry_log_path=telemetry_log_path,
+            report_path=report_path,
+        )
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"online backend: {result.online_backend}")
+    typer.echo(f"telemetry backend: {result.telemetry_backend}")
+    typer.echo(f"synced online feature rows: {result.online_feature_row_count}")
+    typer.echo(f"synced telemetry rows: {result.telemetry_store_row_count}")
+    typer.echo(f"available zone ids: {', '.join(result.zone_ids)}")
+    typer.echo(f"wrote storage sync report to {result.report_path}")
+
+
+@app.command("inspect-storage")
+def inspect_storage_command(
+    feature_snapshot_path: Annotated[
+        Path,
+        typer.Option("--feature-snapshot-path", help="JSON path for online feature snapshot."),
+    ] = DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
+    telemetry_log_path: Annotated[
+        Path,
+        typer.Option("--telemetry-log-path", help="JSONL prediction telemetry log path."),
+    ] = DEFAULT_PREDICTION_LOG_PATH,
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown storage inspection report path."),
+    ] = DEFAULT_STORAGE_INSPECTION_REPORT_PATH,
+    online_backend: Annotated[
+        str | None,
+        typer.Option("--online-backend", help="Online feature backend: json, memory, or redis."),
+    ] = None,
+    telemetry_backend: Annotated[
+        str | None,
+        typer.Option("--telemetry-backend", help="Telemetry backend: jsonl or sqlite."),
+    ] = None,
+    sqlite_path: Annotated[
+        Path | None,
+        typer.Option("--sqlite-path", help="SQLite telemetry database path."),
+    ] = None,
+    redis_url: Annotated[
+        str | None,
+        typer.Option("--redis-url", help="Redis URL for the Redis online feature adapter."),
+    ] = None,
+) -> None:
+    """Inspect configured online feature and prediction telemetry storage backends."""
+
+    try:
+        config = _storage_config_from_options(
+            online_backend=online_backend,
+            telemetry_backend=telemetry_backend,
+            sqlite_path=sqlite_path,
+            redis_url=redis_url,
+        )
+        result = inspect_storage(
+            config=config,
+            feature_snapshot_path=feature_snapshot_path,
+            telemetry_log_path=telemetry_log_path,
+            report_path=report_path,
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"online backend: {result.online_backend}")
+    typer.echo(f"telemetry backend: {result.telemetry_backend}")
+    typer.echo(f"online feature row count: {result.online_feature_row_count}")
+    typer.echo(f"telemetry row count: {result.telemetry_row_count}")
+    typer.echo(f"available zone ids: {', '.join(result.zone_ids)}")
+    typer.echo(f"min telemetry timestamp: {result.min_telemetry_timestamp or 'n/a'}")
+    typer.echo(f"max telemetry timestamp: {result.max_telemetry_timestamp or 'n/a'}")
+    typer.echo(f"wrote storage inspection report to {result.report_path}")
+
+
 def _parse_cli_timestamp(value: str) -> datetime:
     timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if timestamp.tzinfo is None:
         return timestamp.replace(tzinfo=UTC)
     return timestamp
+
+
+def _storage_config_from_options(
+    *,
+    online_backend: str | None,
+    telemetry_backend: str | None,
+    sqlite_path: Path | None,
+    redis_url: str | None,
+) -> StorageConfig:
+    return StorageConfig.from_env().with_overrides(
+        online_backend=online_backend,
+        telemetry_backend=telemetry_backend,
+        sqlite_path=sqlite_path,
+        redis_url=redis_url,
+    )
 
 
 __all__ = ["app"]

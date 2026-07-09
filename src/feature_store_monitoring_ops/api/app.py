@@ -44,6 +44,7 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_API_SERVING_REPORT_PATH,
     DEFAULT_PREDICTION_LOG_PATH,
 )
+from feature_store_monitoring_ops.storage.config import StorageConfig
 from feature_store_monitoring_ops.storage.online import OnlineFeatureStore
 
 
@@ -51,13 +52,18 @@ def create_app(
     artifacts: ServingArtifacts | None = None,
     *,
     feature_store: OnlineFeatureStore | None = None,
+    storage_config: StorageConfig | None = None,
     telemetry_logger: PredictionTelemetryLogger | None = None,
     telemetry_log_path: Path = DEFAULT_PREDICTION_LOG_PATH,
     telemetry_now_fn: Callable[[], datetime] | None = None,
 ) -> FastAPI:
     """Create the local FastAPI prediction app."""
 
-    serving_context = load_serving_context(artifacts, feature_store=feature_store)
+    serving_context = load_serving_context(
+        artifacts,
+        feature_store=feature_store,
+        storage_config=storage_config,
+    )
     metrics = ApiMetrics()
     telemetry = telemetry_logger or PredictionTelemetryLogger(
         log_path=telemetry_log_path,

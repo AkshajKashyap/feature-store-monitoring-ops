@@ -413,3 +413,36 @@ It writes tracked portfolio outputs:
 The release checklist is tracked at:
 
 - `docs/release_checklist.md`
+
+## Milestone 10: Dockerized Local Ops
+
+This milestone adds an optional Dockerized local API + Redis smoke path. The normal Python workflow still works without Docker.
+
+### Docker Commands
+
+```bash
+make docker-build
+make docker-smoke
+```
+
+The Docker smoke script:
+
+- Builds the API image from `Dockerfile`
+- Runs `feature-store-ops run-demo-workflow` locally to create deterministic artifacts
+- Starts Redis with Docker Compose
+- Syncs the latest online feature snapshot into Redis
+- Starts the API container with `FEATURE_STORE_OPS_ONLINE_BACKEND=redis`
+- Checks `/health`, `/model`, `/predict`, and `/metrics`
+- Writes `reports/portfolio/docker_smoke_summary.md`
+- Shuts Docker Compose down cleanly
+
+Docker files:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `.dockerignore`
+- `scripts/docker_smoke_test.sh`
+
+The API defaults to JSON-backed online features. Set `FEATURE_STORE_OPS_ONLINE_BACKEND=redis` and `FEATURE_STORE_OPS_REDIS_URL=redis://redis:6379/0` to use Redis in Docker Compose.
+
+Docker remains optional. `make release-check` does not require Docker.

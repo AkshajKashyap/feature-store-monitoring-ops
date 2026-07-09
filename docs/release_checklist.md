@@ -18,11 +18,20 @@ This checklist covers the current local release-style gate for the Feature Store
 - Storage inspection confirms online feature row count, telemetry row count, zone IDs, and telemetry timestamp bounds.
 - Portfolio workflow and summary reports are written under `reports/portfolio/`.
 
+## Optional Docker Checks
+
+- `make docker-build` builds the local API image from `Dockerfile`.
+- `make docker-smoke` starts Docker Compose with API + Redis.
+- Docker smoke syncs online features into Redis before starting Redis-backed serving.
+- Docker smoke checks `/health`, `/model`, `/predict`, and `/metrics` over localhost.
+- Docker smoke writes `reports/portfolio/docker_smoke_summary.md`.
+- Docker Compose is shut down cleanly by the smoke script.
+
 ## Intentionally Not Production-Ready Yet
 
-- No Docker Compose or container images are included yet.
-- No live Redis, Postgres, or cloud services are required by default.
-- Redis support is adapter-level unless a Redis server/client is configured.
+- Docker Compose is local-only and is not a cloud deployment target.
+- No Postgres or cloud services are required by default.
+- Redis support is included for Docker/local adapter smoke testing, not managed production Redis.
 - SQLite telemetry storage is local durable storage, not a production telemetry warehouse.
 - The model is a baseline forecaster intended to validate the system path, not a tuned production model.
 - Authentication, authorization, rate limiting, and network deployment hardening are not implemented yet.
@@ -34,5 +43,6 @@ This checklist covers the current local release-style gate for the Feature Store
 ```bash
 python -m pip install -e ".[dev]"
 make release-check
+make docker-smoke
 cat reports/portfolio/portfolio_summary.md
 ```

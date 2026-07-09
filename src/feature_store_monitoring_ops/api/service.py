@@ -24,6 +24,7 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
     DEFAULT_SELECTED_MODEL_PATH,
 )
+from feature_store_monitoring_ops.storage.config import StorageConfig, build_online_feature_store
 from feature_store_monitoring_ops.storage.online import JsonBackedOnlineFeatureStore, OnlineFeatureStore
 
 
@@ -104,6 +105,7 @@ def load_serving_context(
     artifacts: ServingArtifacts | None = None,
     *,
     feature_store: OnlineFeatureStore | None = None,
+    storage_config: StorageConfig | None = None,
 ) -> ServingContext:
     """Load model and online feature artifacts without crashing on missing files."""
 
@@ -112,7 +114,7 @@ def load_serving_context(
     _load_model(context)
     _load_model_manifest(context)
     _load_feature_manifest(context)
-    _load_feature_store(context, feature_store=feature_store)
+    _load_feature_store(context, feature_store=feature_store, storage_config=storage_config)
     _validate_manifest_contract(context)
     return context
 
@@ -267,6 +269,7 @@ def _load_feature_store(
     context: ServingContext,
     *,
     feature_store: OnlineFeatureStore | None = None,
+    storage_config: StorageConfig | None = None,
 ) -> None:
     if feature_store is not None:
         try:
@@ -278,17 +281,24 @@ def _load_feature_store(
         context.feature_store = feature_store
         return
 
-    if not context.artifacts.feature_snapshot_path.exists():
+    active_config = storage_config or StorageConfig.from_env()
+    if active_config.online_backend == "json" and not context.artifacts.feature_snapshot_path.exists():
         context.load_errors.append(
             f"missing online feature snapshot: {context.artifacts.feature_snapshot_path}",
         )
         return
-    store = JsonBackedOnlineFeatureStore(snapshot_path=context.artifacts.feature_snapshot_path)
+    store = _build_serving_feature_store(
+        config=active_config,
+        snapshot_path=context.artifacts.feature_snapshot_path,
+    )
     try:
         rows = store.all_rows()
         validate_online_feature_rows(rows)
     except ValueError as exc:
         context.load_errors.append(f"invalid online feature snapshot: {exc}")
+        return
+    except Exception as exc:  # pragma: no cover - defensive adapter/runtime error path
+        context.load_errors.append(f"failed to load online feature store: {exc}")
         return
     context.feature_store = store
 
@@ -342,6 +352,16 @@ def _first_prediction_value(predictions: object) -> float:
     if hasattr(predictions, "__getitem__"):
         return round(float(predictions[0]), 6)  # type: ignore[index]
     return round(float(predictions), 6)
+
+
+def _build_serving_feature_store(
+    *,
+    config: StorageConfig,
+    snapshot_path: Path,
+) -> OnlineFeatureStore:
+    if config.online_backend == "json":
+        return JsonBackedOnlineFeatureStore(snapshot_path=snapshot_path)
+    return build_online_feature_store(config, snapshot_path=snapshot_path)
 
 
 __all__ = [

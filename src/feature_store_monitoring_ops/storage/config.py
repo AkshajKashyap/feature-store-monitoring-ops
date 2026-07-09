@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from feature_store_monitoring_ops.paths import (
     DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
@@ -85,6 +86,7 @@ def build_online_feature_store(
     config: StorageConfig,
     *,
     snapshot_path: Path = DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
+    redis_client: Any | None = None,
 ) -> OnlineFeatureStore:
     """Create an online feature store for the configured backend."""
 
@@ -93,7 +95,7 @@ def build_online_feature_store(
     if config.online_backend == "memory":
         return InMemoryOnlineFeatureStore()
     if config.online_backend == "redis":
-        return RedisOnlineFeatureStore(redis_url=config.redis_url)
+        return RedisOnlineFeatureStore(redis_url=config.redis_url, client=redis_client)
     raise ValueError(f"unsupported online feature backend: {config.online_backend}")
 
 

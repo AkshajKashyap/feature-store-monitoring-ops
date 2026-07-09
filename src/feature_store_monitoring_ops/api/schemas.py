@@ -29,7 +29,7 @@ class FeatureResponse(BaseModel):
 
 
 class PredictRequest(BaseModel):
-    zone_id: str = Field(min_length=1)
+    zone_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$")
 
 
 class PredictionResponse(BaseModel):
@@ -40,6 +40,7 @@ class PredictionResponse(BaseModel):
     model_version: str
     feature_freshness: dict[str, Any]
     feature_columns: list[str]
+    warnings: list[str] = Field(default_factory=list)
 
 
 class MetricsResponse(BaseModel):

@@ -48,6 +48,8 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_RELATIONAL_DB_PATH,
     DEFAULT_RELATIONAL_STORAGE_INSPECTION_REPORT_PATH,
     DEFAULT_RELATIONAL_STORAGE_SYNC_REPORT_PATH,
+    DEFAULT_RELEASE_GATE_METRICS_PATH,
+    DEFAULT_RELEASE_GATE_REPORT_PATH,
     DEFAULT_RELEASE_VERIFICATION_REPORT_PATH,
     DEFAULT_PORTFOLIO_SCALE_SUMMARY_PATH,
     DEFAULT_PORTFOLIO_SUMMARY_PATH,
@@ -66,6 +68,7 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_WORKFLOW_SUMMARY_PATH,
     PROJECT_ROOT,
 )
+from feature_store_monitoring_ops.release_gate import ReleaseGatePaths, run_release_gate
 from feature_store_monitoring_ops.release_verification import generate_release_verification_report
 from feature_store_monitoring_ops.storage.config import StorageConfig
 from feature_store_monitoring_ops.storage.relational import (
@@ -118,7 +121,8 @@ def project_info() -> None:
     typer.echo(f"version: {__version__}")
     typer.echo(
         "core_capabilities: synthetic data, offline features, model training, online features, "
-        "FastAPI serving, telemetry, monitoring, storage adapters, relational storage, workflow verification",
+        "FastAPI serving, API safety controls, telemetry, monitoring, storage adapters, "
+        "relational storage, workflow verification, release gate",
     )
     typer.echo(
         "current_limitations: synthetic data only, local serving, baseline models, optional Docker/Redis/Postgres",
@@ -158,6 +162,8 @@ def project_info() -> None:
     typer.echo(f"portfolio_summary_path: {DEFAULT_PORTFOLIO_SUMMARY_PATH}")
     typer.echo(f"portfolio_scale_summary_path: {DEFAULT_PORTFOLIO_SCALE_SUMMARY_PATH}")
     typer.echo(f"release_verification_report_path: {DEFAULT_RELEASE_VERIFICATION_REPORT_PATH}")
+    typer.echo(f"release_gate_report_path: {DEFAULT_RELEASE_GATE_REPORT_PATH}")
+    typer.echo(f"release_gate_metrics_path: {DEFAULT_RELEASE_GATE_METRICS_PATH}")
 
 
 @app.command("generate-synthetic-events")
@@ -896,6 +902,10 @@ def run_demo_workflow_command(
         int | None,
         typer.Option("--traffic-requests", help="Total simulated prediction requests."),
     ] = None,
+    release_gate: Annotated[
+        bool,
+        typer.Option("--release-gate/--no-release-gate", help="Run release gate near workflow end."),
+    ] = True,
 ) -> None:
     """Run the full deterministic local demo workflow."""
 
@@ -910,6 +920,7 @@ def run_demo_workflow_command(
             num_days=days,
             events_per_zone_per_day=events_per_zone_per_day,
             traffic_request_count=traffic_requests,
+            run_release_gate_stage=release_gate,
         )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
@@ -937,6 +948,7 @@ def verify_release_command(
     """Run release checks and write the release verification report."""
 
     result = generate_release_verification_report(report_path=report_path)
+    gate_result = run_release_gate()
     typer.echo(f"pytest -q: {'passed' if result.pytest_result.passed else 'failed'}")
     typer.echo(f"pytest -q -W default: {'passed' if result.warning_result.passed else 'failed'}")
     typer.echo(f"warning status: {result.warning_status}")
@@ -944,7 +956,67 @@ def verify_release_command(
     typer.echo(f"demo workflow: {result.workflow_status}")
     typer.echo(f"docker status: {result.docker_status}")
     typer.echo(f"wrote release verification report to {result.report_path}")
-    if not result.passed:
+    typer.echo(f"release gate decision: {gate_result.decision}")
+    typer.echo(f"wrote release gate report to {gate_result.report_path}")
+    if not result.passed or gate_result.decision == "hold":
+        raise typer.Exit(code=1)
+
+
+@app.command("release-gate")
+def release_gate_command(
+    report_path: Annotated[
+        Path,
+        typer.Option("--report-path", help="Tracked Markdown release gate report path."),
+    ] = DEFAULT_RELEASE_GATE_REPORT_PATH,
+    metrics_path: Annotated[
+        Path,
+        typer.Option("--metrics-path", help="Tracked JSON release gate metrics path."),
+    ] = DEFAULT_RELEASE_GATE_METRICS_PATH,
+    model_metrics_path: Annotated[
+        Path,
+        typer.Option("--model-metrics-path", help="Model metrics JSON path."),
+    ] = DEFAULT_MODEL_METRICS_PATH,
+    serving_metrics_path: Annotated[
+        Path,
+        typer.Option("--serving-metrics-path", help="Serving monitoring metrics JSON path."),
+    ] = DEFAULT_SERVING_MONITORING_METRICS_PATH,
+    drift_metrics_path: Annotated[
+        Path,
+        typer.Option("--drift-metrics-path", help="Drift monitoring metrics JSON path."),
+    ] = DEFAULT_DRIFT_MONITORING_METRICS_PATH,
+    workflow_results_path: Annotated[
+        Path,
+        typer.Option("--workflow-results-path", help="Workflow results JSON path."),
+    ] = DEFAULT_WORKFLOW_RESULTS_PATH,
+    verification_report_path: Annotated[
+        Path,
+        typer.Option("--verification-report-path", help="Release verification Markdown path."),
+    ] = DEFAULT_RELEASE_VERIFICATION_REPORT_PATH,
+    storage_inspection_report_path: Annotated[
+        Path,
+        typer.Option("--storage-inspection-report-path", help="Storage inspection Markdown path."),
+    ] = DEFAULT_STORAGE_INSPECTION_REPORT_PATH,
+) -> None:
+    """Evaluate release evidence and write release gate reports."""
+
+    result = run_release_gate(
+        paths=ReleaseGatePaths(
+            model_metrics_path=model_metrics_path,
+            serving_metrics_path=serving_metrics_path,
+            drift_metrics_path=drift_metrics_path,
+            storage_inspection_report_path=storage_inspection_report_path,
+            workflow_results_path=workflow_results_path,
+            verification_report_path=verification_report_path,
+            report_path=report_path,
+            metrics_path=metrics_path,
+        ),
+    )
+    typer.echo(f"release gate decision: {result.decision}")
+    typer.echo(f"hold reasons: {len(result.hold_reasons)}")
+    typer.echo(f"warning reasons: {len(result.warning_reasons)}")
+    typer.echo(f"wrote release gate report to {result.report_path}")
+    typer.echo(f"wrote release gate metrics to {result.metrics_path}")
+    if result.decision == "hold":
         raise typer.Exit(code=1)
 
 

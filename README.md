@@ -5,8 +5,9 @@ Production-style ML feature store and monitoring system with offline/online feat
 ## Verification Status
 
 - Version: `0.1.0`
-- Release gate: `make release-check`
+- Release gate: expected `warn` for v0.1.0 local portfolio release
 - Release report: `reports/portfolio/verification_0.1.0.md`
+- Release gate reports: `reports/portfolio/release_gate_0.1.0.md` and `reports/portfolio/release_gate_0.1.0.json`
 - CI: GitHub Actions runs Python 3.11, pytest, Ruff, and the demo workflow.
 - Warning policy: project-owned warnings fail tests; known third-party warnings are filtered narrowly.
 
@@ -33,13 +34,14 @@ cat reports/portfolio/portfolio_summary.md
 - Validation-only model selection and one-time test evaluation.
 - Online feature materialization with offline/online parity checks.
 - Local FastAPI serving, durable telemetry, monitoring, drift checks, and data quality checks.
+- API safety controls for optional API key auth, freshness checks, request validation, and prediction warnings.
 - JSON, SQLite, Redis-compatible, and SQLAlchemy relational storage paths.
-- One-command workflow orchestration and release verification reporting.
+- One-command workflow orchestration, release verification reporting, and release gate decisioning.
 
 ## Current Limitations
 
 - Synthetic data only; no external production data source is connected.
-- FastAPI serving is local and does not include auth, rate limiting, or cloud deployment.
+- FastAPI serving is local; optional API key auth is included, but full identity, rate limiting, and cloud deployment are not.
 - Redis, Postgres, and Docker are optional local paths, not required services.
 - SQLite databases are local development stores, not production warehouses.
 - Forecasting models are deterministic baselines for validating the system path.
@@ -575,3 +577,51 @@ feature-store-ops run-demo-workflow --preset portfolio
 ```
 
 Docker Compose includes an optional `postgres` profile for local experimentation, but normal tests and `make release-check` do not require Postgres.
+
+## Milestone 14: API Safety Controls And Release Gate
+
+This milestone adds operational controls and a release decision boundary. It does not add new ML models.
+
+### API Safety Controls
+
+Local mode remains unauthenticated by default. To require API keys for API endpoints except `/health`, set:
+
+```bash
+export FEATURE_STORE_OPS_API_KEY="local-secret"
+```
+
+Then call protected endpoints with:
+
+```bash
+curl -H "X-API-Key: local-secret" http://127.0.0.1:8000/model
+```
+
+Additional safety settings:
+
+- `FEATURE_STORE_OPS_MAX_FEATURE_FRESHNESS_SECONDS`
+- `FEATURE_STORE_OPS_REJECT_STALE_FEATURES`
+- `FEATURE_STORE_OPS_MIN_PREDICTION`
+- `FEATURE_STORE_OPS_MAX_PREDICTION`
+- `FEATURE_STORE_OPS_MAX_REQUEST_BODY_BYTES`
+
+`POST /predict` returns warning metadata for stale features or predictions outside the expected range. Stale features can be rejected when `FEATURE_STORE_OPS_REJECT_STALE_FEATURES=true`.
+
+### Release Gate
+
+```bash
+feature-store-ops release-gate
+make verify-release
+```
+
+The release gate writes:
+
+- `reports/portfolio/release_gate_0.1.0.md`
+- `reports/portfolio/release_gate_0.1.0.json`
+
+Decisions:
+
+- `pass`: no hold or warning reasons.
+- `warn`: acceptable for local portfolio review with known limitations.
+- `hold`: required evidence is missing or hard thresholds fail.
+
+The expected v0.1.0 decision is `warn`, because the evidence is synthetic, the API is local, and Docker/Redis/Postgres are optional rather than required production services. v0.1.0 is portfolio/local ops, not production deployment.

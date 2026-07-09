@@ -30,6 +30,7 @@ This project demonstrates a production-style ML feature store and monitoring sys
 - Relational event rows: 720
 - Relational offline feature rows: 595
 - Relational online snapshot rows: 5
+- Release gate decision: `warn`
 
 ## Reviewer Quickstart
 

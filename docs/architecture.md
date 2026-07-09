@@ -8,10 +8,10 @@ Feature Store Monitoring Ops is a deterministic local ML system that mirrors a p
 - Offline feature layer: leakage-safe lag, rolling, zone/hour aggregate, and future target features with chronological splits.
 - Model layer: validation-only model selection across simple baselines and sklearn regressors, followed by one-time test evaluation.
 - Online feature layer: latest-per-zone materialization with offline/online parity checks and JSON, memory, and Redis-compatible adapters.
-- Serving layer: local FastAPI app that loads the selected model and online feature snapshot for prediction.
+- Serving layer: local FastAPI app with optional API key auth, freshness checks, and prediction warning metadata.
 - Telemetry and monitoring: JSONL prediction logs, SQLite telemetry sync, serving monitoring, drift checks, and data quality checks.
 - Storage layer: SQLAlchemy-backed relational storage for events, offline features, online snapshot metadata, and sync metadata.
-- Workflow layer: one-command deterministic demo workflow and release verification report.
+- Workflow layer: one-command deterministic demo workflow, release verification, and release gate decisioning.
 
 ## Default Local Flow
 
@@ -25,6 +25,7 @@ synthetic events
   -> serving and drift monitoring
   -> storage sync and inspection
   -> relational sync and inspection
+  -> release gate decision
 ```
 
 ## Storage Boundaries

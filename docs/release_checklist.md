@@ -23,6 +23,8 @@ This checklist covers the current local release-style gate for the Feature Store
 - Project-owned warnings are configured to fail tests.
 - Known third-party deprecations are filtered narrowly by message, category, and module.
 - Release verification can be refreshed with `make verify-release`.
+- Release gate reports are refreshed under `reports/portfolio/release_gate_0.1.0.*`.
+- API safety controls are available for optional API key auth, freshness checks, prediction warnings, and body-size limits.
 
 ## Verified By CI
 
@@ -48,6 +50,13 @@ This checklist covers the current local release-style gate for the Feature Store
 - The portfolio-scale run writes `reports/portfolio/portfolio_scale_summary.md`.
 - Generated portfolio-scale data, artifacts, logs, and SQLite storage remain ignored by git.
 
+## Release Gate Decision
+
+- `pass`: all required evidence is present and no warning boundaries remain.
+- `warn`: evidence is acceptable for local portfolio review with known limitations.
+- `hold`: required evidence is missing or hard thresholds fail.
+- v0.1.0 is expected to be `warn`, not `pass`, because it is synthetic/local and not production-hosted.
+
 ## Intentionally Not Production-Ready Yet
 
 - Docker Compose is local-only and is not a cloud deployment target.
@@ -56,7 +65,7 @@ This checklist covers the current local release-style gate for the Feature Store
 - Redis support is included for Docker/local adapter smoke testing, not managed production Redis.
 - SQLite telemetry and feature-store databases are local durable storage, not production warehouses.
 - The model is a baseline forecaster intended to validate the system path, not a tuned production model.
-- Authentication, authorization, rate limiting, and network deployment hardening are not implemented yet.
+- API key auth is optional; full identity, authorization, rate limiting, and network deployment hardening are not implemented yet.
 - Monitoring thresholds are local defaults and are not tied to incident response or alert routing.
 - Synthetic data is used instead of an external production event source.
 
@@ -66,6 +75,7 @@ This checklist covers the current local release-style gate for the Feature Store
 python -m pip install -e ".[dev]"
 make release-check
 make verify-release
+feature-store-ops release-gate
 make docker-smoke
 cat reports/portfolio/portfolio_summary.md
 ```

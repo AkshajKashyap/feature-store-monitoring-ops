@@ -31,6 +31,7 @@ def test_workflow_stage_ordering() -> None:
         "inspect_storage",
         "sync_relational_store",
         "inspect_relational_store",
+        "release_gate",
     )
 
 
@@ -77,6 +78,8 @@ def test_workflow_writes_markdown_and_json_reports(tmp_path) -> None:
     assert all(stage["status"] == STAGE_PASSED for stage in payload["stages"])
     assert (tmp_path / "reports" / "relational_storage_sync_summary.md").exists()
     assert (tmp_path / "reports" / "relational_storage_inspection_summary.md").exists()
+    assert (tmp_path / "reports" / "portfolio" / "release_gate_0.1.0.md").exists()
+    assert (tmp_path / "reports" / "portfolio" / "release_gate_0.1.0.json").exists()
 
 
 def test_run_demo_workflow_cli_smoke_behavior(tmp_path) -> None:
@@ -100,6 +103,7 @@ def test_run_demo_workflow_cli_smoke_behavior(tmp_path) -> None:
     assert "generate_synthetic_events: passed" in result.output
     assert "sync_relational_store: passed" in result.output
     assert "inspect_relational_store: passed" in result.output
+    assert "release_gate: passed" in result.output
     assert (tmp_path / "reports" / "portfolio" / "workflow_summary.md").exists()
     assert (tmp_path / "reports" / "portfolio" / "workflow_results.json").exists()
     assert (tmp_path / "reports" / "portfolio" / "portfolio_summary.md").exists()
@@ -134,11 +138,15 @@ def test_workflow_accepts_portfolio_preset_and_increases_online_rows(tmp_path) -
 def test_workflow_includes_relational_storage_stages() -> None:
     assert "sync_relational_store" in WORKFLOW_STAGE_ORDER
     assert "inspect_relational_store" in WORKFLOW_STAGE_ORDER
+    assert "release_gate" in WORKFLOW_STAGE_ORDER
     assert WORKFLOW_STAGE_ORDER.index("sync_relational_store") > WORKFLOW_STAGE_ORDER.index(
         "inspect_storage",
     )
     assert WORKFLOW_STAGE_ORDER.index("inspect_relational_store") > WORKFLOW_STAGE_ORDER.index(
         "sync_relational_store",
+    )
+    assert WORKFLOW_STAGE_ORDER.index("release_gate") > WORKFLOW_STAGE_ORDER.index(
+        "inspect_relational_store",
     )
 
 

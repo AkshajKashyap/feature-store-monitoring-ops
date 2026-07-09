@@ -137,13 +137,22 @@ def predict_for_zone(context: ServingContext, zone_id: str) -> tuple[float, dict
 
     _require_model(context)
     row = get_feature_row(context, zone_id)
+    prediction, latency_ms = predict_from_feature_row(context, row)
+    return prediction, row, latency_ms
+
+
+def predict_from_feature_row(context: ServingContext, row: dict[str, object]) -> tuple[float, float]:
+    """Run the selected model for an already validated feature row."""
+
+    _require_model(context)
+    _validate_required_input_columns(row)
     input_columns = get_model_input_columns()
     features = pd.DataFrame([{column: row[column] for column in input_columns}])
     start = time.perf_counter()
     prediction_values = context.model.predict(features)
     latency_ms = (time.perf_counter() - start) * 1000
     prediction = _first_prediction_value(prediction_values)
-    return prediction, row, latency_ms
+    return prediction, latency_ms
 
 
 def extract_model_features(row: dict[str, object]) -> dict[str, object]:
@@ -381,5 +390,6 @@ __all__ = [
     "extract_model_features",
     "get_feature_row",
     "load_serving_context",
+    "predict_from_feature_row",
     "predict_for_zone",
 ]

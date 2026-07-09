@@ -27,6 +27,7 @@ from feature_store_monitoring_ops.monitoring.telemetry import (
     reset_prediction_log,
 )
 from feature_store_monitoring_ops.paths import PROJECT_ROOT
+from feature_store_monitoring_ops.release_gate import ReleaseGatePaths, run_release_gate
 from feature_store_monitoring_ops.storage.config import StorageConfig
 from feature_store_monitoring_ops.storage.relational import (
     inspect_relational_store,
@@ -55,6 +56,7 @@ WORKFLOW_STAGE_ORDER: tuple[str, ...] = (
     "inspect_storage",
     "sync_relational_store",
     "inspect_relational_store",
+    "release_gate",
 )
 
 STAGE_PASSED = "passed"
@@ -78,6 +80,7 @@ class DemoWorkflowConfig:
     events_per_zone_per_day: int | None = None
     traffic_base_timestamp: datetime = datetime(2026, 2, 1, tzinfo=UTC)
     traffic_request_count: int | None = None
+    run_release_gate_stage: bool = True
     storage_config: StorageConfig = field(default_factory=StorageConfig)
 
     @classmethod
@@ -93,6 +96,7 @@ class DemoWorkflowConfig:
         num_days: int | None = None,
         events_per_zone_per_day: int | None = None,
         traffic_request_count: int | None = None,
+        run_release_gate_stage: bool = True,
     ) -> DemoWorkflowConfig:
         """Build workflow config from a named synthetic scale preset."""
 
@@ -120,6 +124,7 @@ class DemoWorkflowConfig:
             num_days=synthetic_config.num_days,
             events_per_zone_per_day=synthetic_config.events_per_zone_per_day,
             traffic_request_count=traffic_request_count or default_traffic_count,
+            run_release_gate_stage=run_release_gate_stage,
         )
 
     @property
@@ -233,6 +238,18 @@ class DemoWorkflowConfig:
     @property
     def portfolio_scale_summary_path(self) -> Path:
         return self.output_root / "reports" / "portfolio" / "portfolio_scale_summary.md"
+
+    @property
+    def release_gate_report_path(self) -> Path:
+        return self.output_root / "reports" / "portfolio" / "release_gate_0.1.0.md"
+
+    @property
+    def release_gate_metrics_path(self) -> Path:
+        return self.output_root / "reports" / "portfolio" / "release_gate_0.1.0.json"
+
+    @property
+    def release_verification_report_path(self) -> Path:
+        return self.output_root / "reports" / "portfolio" / "verification_0.1.0.md"
 
     @property
     def sqlite_path(self) -> Path:
@@ -363,16 +380,54 @@ def run_demo_workflow(
             )
             failure_seen = True
 
-    result = DemoWorkflowResult(
-        stages=stages,
-        workflow_summary_path=active_config.workflow_summary_path,
-        workflow_results_path=active_config.workflow_results_path,
-        portfolio_summary_path=active_config.portfolio_summary_path,
-        portfolio_scale_summary_path=active_config.portfolio_scale_summary_path,
-        preset=active_config.preset,
-    )
+    result = _build_workflow_result(stages, active_config)
+    _write_workflow_reports(result, active_config)
+
+    if failure_seen and stop_on_failure:
+        stages.append(
+            WorkflowStageResult(
+                name="release_gate",
+                status=STAGE_SKIPPED,
+                error_message="skipped because an earlier stage failed",
+            ),
+        )
+    elif active_config.run_release_gate_stage:
+        try:
+            stages.append(_stage_release_gate(active_config))
+        except Exception as exc:  # pragma: no cover - exercised through integration behavior
+            stages.append(
+                WorkflowStageResult(
+                    name="release_gate",
+                    status=STAGE_FAILED,
+                    error_message=str(exc),
+                ),
+            )
+    else:
+        stages.append(
+            WorkflowStageResult(
+                name="release_gate",
+                status=STAGE_SKIPPED,
+                error_message="release gate disabled by workflow config",
+            ),
+        )
+
+    result = _build_workflow_result(stages, active_config)
     _write_workflow_reports(result, active_config)
     return result
+
+
+def _build_workflow_result(
+    stages: list[WorkflowStageResult],
+    config: DemoWorkflowConfig,
+) -> DemoWorkflowResult:
+    return DemoWorkflowResult(
+        stages=stages,
+        workflow_summary_path=config.workflow_summary_path,
+        workflow_results_path=config.workflow_results_path,
+        portfolio_summary_path=config.portfolio_summary_path,
+        portfolio_scale_summary_path=config.portfolio_scale_summary_path,
+        preset=config.preset,
+    )
 
 
 def build_workflow_summary(result: DemoWorkflowResult) -> str:
@@ -479,6 +534,7 @@ def build_portfolio_summary(result: DemoWorkflowResult) -> str:
             f"{_format_optional_metric(metrics.get('relational_offline_feature_rows'))}",
             f"- Relational online snapshot rows: "
             f"{_format_optional_metric(metrics.get('relational_online_snapshot_rows'))}",
+            f"- Release gate decision: `{metrics.get('release_gate_decision', 'n/a')}`",
             "",
             "## Reviewer Quickstart",
             "",
@@ -535,6 +591,7 @@ def build_portfolio_scale_summary(result: DemoWorkflowResult) -> str:
             f"{_format_optional_metric(metrics.get('relational_offline_feature_rows'))}",
             f"- Relational online snapshot rows: "
             f"{_format_optional_metric(metrics.get('relational_online_snapshot_rows'))}",
+            f"- Release gate decision: `{metrics.get('release_gate_decision', 'n/a')}`",
             "",
             "## Notes",
             "",
@@ -851,6 +908,34 @@ def _stage_inspect_relational_store(config: DemoWorkflowConfig) -> WorkflowStage
     )
 
 
+def _stage_release_gate(config: DemoWorkflowConfig) -> WorkflowStageResult:
+    result = run_release_gate(
+        paths=ReleaseGatePaths(
+            model_metrics_path=config.model_metrics_path,
+            serving_metrics_path=config.serving_monitoring_metrics_path,
+            drift_metrics_path=config.drift_monitoring_metrics_path,
+            storage_inspection_report_path=config.storage_inspection_report_path,
+            workflow_results_path=config.workflow_results_path,
+            verification_report_path=config.release_verification_report_path,
+            report_path=config.release_gate_report_path,
+            metrics_path=config.release_gate_metrics_path,
+        ),
+    )
+    return WorkflowStageResult(
+        name="release_gate",
+        status=STAGE_PASSED,
+        output_paths={
+            "summary_report": str(result.report_path),
+            "metrics": str(result.metrics_path),
+        },
+        metrics={
+            "decision": result.decision,
+            "hold_reasons": len(result.hold_reasons),
+            "warning_reasons": len(result.warning_reasons),
+        },
+    )
+
+
 def _write_workflow_reports(result: DemoWorkflowResult, config: DemoWorkflowConfig) -> None:
     config.workflow_summary_path.parent.mkdir(parents=True, exist_ok=True)
     config.workflow_summary_path.write_text(build_workflow_summary(result), encoding="utf-8")
@@ -909,6 +994,8 @@ def _final_metrics(result: DemoWorkflowResult) -> dict[str, Any]:
             metrics["relational_online_snapshot_rows"] = stage.metrics.get(
                 "online_snapshot_row_count",
             )
+        elif stage.name == "release_gate":
+            metrics["release_gate_decision"] = stage.metrics.get("decision")
     return metrics
 
 

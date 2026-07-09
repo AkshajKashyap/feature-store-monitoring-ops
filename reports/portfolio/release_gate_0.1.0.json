@@ -1,0 +1,30 @@
+{
+  "decision": "warn",
+  "evidence": {
+    "data_quality_passed": true,
+    "docker_status": "unavailable: The command 'docker' could not be found in this WSL 2 distro.",
+    "drift_warning_count": 8,
+    "p95_latency_ms": 30.451557,
+    "release_gate_in_workflow": true,
+    "selected_model": "hist_gradient_boosting",
+    "serving_error_rate": 0.166667,
+    "serving_warning_count": 2,
+    "storage_inspection_available": true,
+    "successful_predictions": 5,
+    "test_mae": 6.29841,
+    "test_r2": 0.313692,
+    "test_rmse": 7.948043,
+    "verification_status": "available",
+    "workflow_status": "passed"
+  },
+  "hold_reasons": [],
+  "version": "0.1.0",
+  "warning_reasons": [
+    "Synthetic data only; no external production event source is connected.",
+    "Local API is not production-hosted and has no deployment hardening.",
+    "Serving error rate is nonzero (0.167).",
+    "Successful prediction sample is small (5 < 10).",
+    "Drift monitoring produced 8 warning(s).",
+    "Docker is unavailable in this environment."
+  ]
+}

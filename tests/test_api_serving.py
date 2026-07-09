@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -11,6 +12,7 @@ from typer.testing import CliRunner
 
 from feature_store_monitoring_ops.api.app import create_app
 from feature_store_monitoring_ops.api.app import run_api_traffic_simulation
+from feature_store_monitoring_ops.api.safety import API_KEY_ENV, ApiSafetySettings
 from feature_store_monitoring_ops.api.service import ServingArtifacts
 from feature_store_monitoring_ops.cli import app as cli_app
 from feature_store_monitoring_ops.features.contract import (
@@ -20,7 +22,7 @@ from feature_store_monitoring_ops.features.contract import (
 )
 from feature_store_monitoring_ops.features.online import build_online_feature_manifest
 from feature_store_monitoring_ops.models.training import ColumnBaselineRegressor
-from feature_store_monitoring_ops.monitoring.telemetry import PredictionTelemetryLogger
+from feature_store_monitoring_ops.monitoring.telemetry import IncrementingClock, PredictionTelemetryLogger
 
 
 def test_health_endpoint(tmp_path) -> None:
@@ -70,6 +72,56 @@ def test_successful_prediction(tmp_path) -> None:
     assert payload["model_name"] == "naive_lag_1"
     assert payload["as_of_timestamp"] == "2026-01-30T12:00:00+00:00"
     assert payload["feature_columns"] == list(get_model_input_columns())
+    assert "warnings" in payload
+
+
+def test_api_key_disabled_by_default(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv(API_KEY_ENV, raising=False)
+    client = _client_with_artifacts(tmp_path)
+
+    response = client.post("/predict", json={"zone_id": "zone_01"})
+
+    assert response.status_code == 200
+
+
+def test_api_key_required_when_env_var_is_set(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(API_KEY_ENV, "secret")
+    client = _client_with_artifacts(tmp_path)
+
+    health_response = client.get("/health")
+    prediction_response = client.post("/predict", json={"zone_id": "zone_01"})
+
+    assert health_response.status_code == 200
+    assert prediction_response.status_code == 401
+    assert prediction_response.json()["detail"] == "missing API key"
+
+
+def test_wrong_api_key_rejected(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(API_KEY_ENV, "secret")
+    client = _client_with_artifacts(tmp_path)
+
+    response = client.post(
+        "/predict",
+        json={"zone_id": "zone_01"},
+        headers={"X-API-Key": "wrong"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "invalid API key"
+
+
+def test_correct_api_key_accepted(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(API_KEY_ENV, "secret")
+    client = _client_with_artifacts(tmp_path)
+
+    response = client.post(
+        "/predict",
+        json={"zone_id": "zone_01"},
+        headers={"X-API-Key": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["zone_id"] == "zone_01"
 
 
 def test_unknown_zone_id_returns_clean_error(tmp_path) -> None:
@@ -92,6 +144,48 @@ def test_metrics_update_after_prediction(tmp_path) -> None:
     assert after["prediction_count"] == before["prediction_count"] + 1
     assert after["request_count"] > before["request_count"]
     assert after["average_prediction_latency_ms"] >= 0
+
+
+def test_stale_feature_warning_and_rejection_logic(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv(API_KEY_ENV, raising=False)
+    warning_client = _client_with_artifacts(
+        tmp_path,
+        safety_settings=ApiSafetySettings(
+            max_feature_freshness_seconds=1.0,
+            reject_stale_features=False,
+        ),
+        now=datetime(2026, 2, 2, tzinfo=UTC),
+    )
+    warning_response = warning_client.post("/predict", json={"zone_id": "zone_01"})
+
+    reject_client = _client_with_artifacts(
+        tmp_path,
+        safety_settings=ApiSafetySettings(
+            max_feature_freshness_seconds=1.0,
+            reject_stale_features=True,
+        ),
+        now=datetime(2026, 2, 2, tzinfo=UTC),
+    )
+    reject_response = reject_client.post("/predict", json={"zone_id": "zone_01"})
+
+    assert warning_response.status_code == 200
+    assert any("stale" in warning for warning in warning_response.json()["warnings"])
+    assert reject_response.status_code == 409
+    assert "stale" in reject_response.json()["detail"]
+
+
+def test_prediction_warning_metadata(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv(API_KEY_ENV, raising=False)
+    client = _client_with_artifacts(
+        tmp_path,
+        safety_settings=ApiSafetySettings(max_prediction=10.0),
+        now=datetime(2026, 1, 30, 13, tzinfo=UTC),
+    )
+
+    response = client.post("/predict", json={"zone_id": "zone_01"})
+
+    assert response.status_code == 200
+    assert any("above expected maximum" in warning for warning in response.json()["warnings"])
 
 
 def test_serve_api_cli_smoke_behavior(tmp_path) -> None:
@@ -143,27 +237,49 @@ class InProcessTestClient:
     def __init__(self, app) -> None:
         self.app = app
 
-    def get(self, path: str) -> httpx.Response:
-        return asyncio.run(self._request("GET", path))
+    def get(self, path: str, *, headers: dict[str, str] | None = None) -> httpx.Response:
+        return asyncio.run(self._request("GET", path, headers=headers))
 
-    def post(self, path: str, *, json: dict[str, object]) -> httpx.Response:
-        return asyncio.run(self._request("POST", path, json=json))
+    def post(
+        self,
+        path: str,
+        *,
+        json: dict[str, object],
+        headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        return asyncio.run(self._request("POST", path, json=json, headers=headers))
 
     async def _request(
         self,
         method: str,
         path: str,
         json: dict[str, object] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-            return await client.request(method, path, json=json)
+            return await client.request(method, path, json=json, headers=headers)
 
 
-def _client_with_artifacts(tmp_path: Path) -> InProcessTestClient:
+def _client_with_artifacts(
+    tmp_path: Path,
+    *,
+    safety_settings: ApiSafetySettings | None = None,
+    now: datetime | None = None,
+) -> InProcessTestClient:
     artifacts = _write_serving_artifacts(tmp_path)
-    telemetry_logger = PredictionTelemetryLogger(log_path=tmp_path / "predictions.jsonl")
-    return InProcessTestClient(create_app(artifacts=artifacts, telemetry_logger=telemetry_logger))
+    telemetry_kwargs = {"now_fn": IncrementingClock(now)} if now is not None else {}
+    telemetry_logger = PredictionTelemetryLogger(
+        log_path=tmp_path / "predictions.jsonl",
+        **telemetry_kwargs,
+    )
+    return InProcessTestClient(
+        create_app(
+            artifacts=artifacts,
+            telemetry_logger=telemetry_logger,
+            safety_settings=safety_settings,
+        ),
+    )
 
 
 def _write_serving_artifacts(tmp_path: Path) -> ServingArtifacts:

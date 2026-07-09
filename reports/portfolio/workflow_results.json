@@ -17,7 +17,8 @@
     "sync_storage",
     "inspect_storage",
     "sync_relational_store",
-    "inspect_relational_store"
+    "inspect_relational_store",
+    "release_gate"
   ],
   "stages": [
     {
@@ -227,6 +228,20 @@
       "name": "inspect_relational_store",
       "output_paths": {
         "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/relational_storage_inspection_summary.md"
+      },
+      "status": "passed"
+    },
+    {
+      "error_message": null,
+      "metrics": {
+        "decision": "warn",
+        "hold_reasons": 0,
+        "warning_reasons": 6
+      },
+      "name": "release_gate",
+      "output_paths": {
+        "metrics": "/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/release_gate_0.1.0.json",
+        "summary_report": "/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/release_gate_0.1.0.md"
       },
       "status": "passed"
     }

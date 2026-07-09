@@ -9,8 +9,10 @@ from collections.abc import Callable
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 import httpx
 
+from feature_store_monitoring_ops.api.safety import ApiSafetySettings
 from feature_store_monitoring_ops.api.schemas import (
     FeatureResponse,
     HealthResponse,
@@ -28,7 +30,7 @@ from feature_store_monitoring_ops.api.service import (
     extract_model_features,
     get_feature_row,
     load_serving_context,
-    predict_for_zone,
+    predict_from_feature_row,
 )
 from feature_store_monitoring_ops.features.contract import (
     AS_OF_TIMESTAMP_COLUMN,
@@ -38,6 +40,7 @@ from feature_store_monitoring_ops.features.contract import (
 from feature_store_monitoring_ops.monitoring.telemetry import (
     PredictionTelemetryLogger,
     TelemetrySimulationResult,
+    feature_freshness_seconds,
     utc_now,
 )
 from feature_store_monitoring_ops.paths import (
@@ -56,6 +59,7 @@ def create_app(
     telemetry_logger: PredictionTelemetryLogger | None = None,
     telemetry_log_path: Path = DEFAULT_PREDICTION_LOG_PATH,
     telemetry_now_fn: Callable[[], datetime] | None = None,
+    safety_settings: ApiSafetySettings | None = None,
 ) -> FastAPI:
     """Create the local FastAPI prediction app."""
 
@@ -69,10 +73,12 @@ def create_app(
         log_path=telemetry_log_path,
         now_fn=telemetry_now_fn or utc_now,
     )
+    safety = safety_settings or ApiSafetySettings.from_env()
     app = FastAPI(title="Feature Store Monitoring Ops API", version="0.1.0")
     app.state.serving_context = serving_context
     app.state.metrics = metrics
     app.state.telemetry = telemetry
+    app.state.safety = safety
 
     @app.middleware("http")
     async def metrics_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -85,6 +91,25 @@ def create_app(
         if response.status_code >= 400:
             metrics.record_error()
         return response
+
+    @app.middleware("http")
+    async def safety_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+        content_length = request.headers.get("content-length")
+        if content_length is not None and _request_has_body(request):
+            try:
+                body_size = int(content_length)
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "invalid content-length"})
+            if body_size > safety.max_request_body_bytes:
+                return JSONResponse(status_code=413, content={"detail": "request body too large"})
+
+        if _path_requires_api_key(request.url.path) and safety.api_key_required:
+            supplied_api_key = request.headers.get("X-API-Key")
+            if supplied_api_key is None:
+                return JSONResponse(status_code=401, content={"detail": "missing API key"})
+            if not safety.authenticate(supplied_api_key):
+                return JSONResponse(status_code=403, content={"detail": "invalid API key"})
+        return await call_next(request)
 
     @app.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
@@ -129,6 +154,7 @@ def create_app(
     async def predict(request: PredictRequest) -> PredictionResponse:
         context = _get_context(app)
         telemetry = _get_telemetry(app)
+        safety = _get_safety(app)
         request_id = telemetry.next_request_id()
         request_start = time.perf_counter()
         if not context.is_ready:
@@ -145,7 +171,7 @@ def create_app(
                 detail="serving artifacts are not ready: " + "; ".join(context.load_errors),
             )
         try:
-            prediction, row, latency_ms = predict_for_zone(context, request.zone_id)
+            row = get_feature_row(context, request.zone_id)
         except RuntimeError as exc:
             telemetry.log_error(
                 request_id=request_id,
@@ -177,6 +203,60 @@ def create_app(
             )
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+        telemetry_timestamp = telemetry.now_fn()
+        freshness_seconds = feature_freshness_seconds(
+            telemetry_timestamp,
+            str(row[AS_OF_TIMESTAMP_COLUMN]),
+        )
+        warnings = _prediction_warnings(
+            safety=safety,
+            prediction=None,
+            freshness_seconds=freshness_seconds,
+        )
+        if warnings and safety.reject_stale_features:
+            telemetry.log_error(
+                request_id=request_id,
+                zone_id=request.zone_id,
+                model_name=context.selected_model,
+                model_version=context.model_version,
+                latency_ms=_elapsed_ms(request_start),
+                error_type="stale_feature",
+                as_of_timestamp=str(row[AS_OF_TIMESTAMP_COLUMN]),
+                timestamp=telemetry_timestamp,
+            )
+            raise HTTPException(status_code=409, detail=warnings[0])
+
+        try:
+            prediction, latency_ms = predict_from_feature_row(context, row)
+        except RuntimeError as exc:
+            telemetry.log_error(
+                request_id=request_id,
+                zone_id=request.zone_id,
+                model_name=context.selected_model,
+                model_version=context.model_version,
+                latency_ms=_elapsed_ms(request_start),
+                error_type="serving_error",
+                timestamp=telemetry_timestamp,
+            )
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            telemetry.log_error(
+                request_id=request_id,
+                zone_id=request.zone_id,
+                model_name=context.selected_model,
+                model_version=context.model_version,
+                latency_ms=_elapsed_ms(request_start),
+                error_type="feature_error",
+                as_of_timestamp=str(row[AS_OF_TIMESTAMP_COLUMN]),
+                timestamp=telemetry_timestamp,
+            )
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+        warnings = _prediction_warnings(
+            safety=safety,
+            prediction=prediction,
+            freshness_seconds=freshness_seconds,
+        )
         _get_metrics(app).record_prediction(latency_ms)
         telemetry_row = telemetry.log_success(
             request_id=request_id,
@@ -186,6 +266,7 @@ def create_app(
             model_name=context.selected_model,
             model_version=context.model_version,
             latency_ms=latency_ms,
+            timestamp=telemetry_timestamp,
         )
         return PredictionResponse(
             zone_id=str(row["zone_id"]),
@@ -199,6 +280,7 @@ def create_app(
                 feature_freshness_seconds=telemetry_row["feature_freshness_seconds"],
             ),
             feature_columns=list(get_model_input_columns()),
+            warnings=warnings,
         )
 
     @app.get("/metrics", response_model=MetricsResponse)
@@ -264,6 +346,10 @@ def _get_telemetry(app: FastAPI) -> PredictionTelemetryLogger:
     return app.state.telemetry
 
 
+def _get_safety(app: FastAPI) -> ApiSafetySettings:
+    return app.state.safety
+
+
 async def _run_api_smoke_test_async(app: FastAPI) -> dict[str, object]:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -272,7 +358,9 @@ async def _run_api_smoke_test_async(app: FastAPI) -> dict[str, object]:
         if not health_response.json()["ready"]:
             raise RuntimeError(f"API is not ready: {health_response.json()['errors']}")
 
-        model_response = await client.get("/model")
+        headers = _api_key_headers(app)
+
+        model_response = await client.get("/model", headers=headers)
         _assert_success(model_response.status_code, "/model")
 
         context = _get_context(app)
@@ -282,13 +370,17 @@ async def _run_api_smoke_test_async(app: FastAPI) -> dict[str, object]:
             raise RuntimeError("online feature snapshot has no rows")
         zone_id = str(rows[0]["zone_id"])
 
-        feature_response = await client.get(f"/features/{zone_id}")
+        feature_response = await client.get(f"/features/{zone_id}", headers=headers)
         _assert_success(feature_response.status_code, f"/features/{zone_id}")
 
-        prediction_response = await client.post("/predict", json={"zone_id": zone_id})
+        prediction_response = await client.post(
+            "/predict",
+            json={"zone_id": zone_id},
+            headers=headers,
+        )
         _assert_success(prediction_response.status_code, "/predict")
 
-        metrics_response = await client.get("/metrics")
+        metrics_response = await client.get("/metrics", headers=headers)
         _assert_success(metrics_response.status_code, "/metrics")
         metrics_payload = metrics_response.json()
         if metrics_payload["prediction_count"] < 1:
@@ -322,9 +414,10 @@ async def _run_api_traffic_simulation_async(
     failed_requests = 0
 
     transport = httpx.ASGITransport(app=app)
+    headers = _api_key_headers(app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         for zone_id in zones:
-            response = await client.post("/predict", json={"zone_id": zone_id})
+            response = await client.post("/predict", json={"zone_id": zone_id}, headers=headers)
             if response.status_code < 400:
                 successful_requests += 1
             else:
@@ -368,6 +461,38 @@ def _assert_success(status_code: int, endpoint: str) -> None:
 
 def _elapsed_ms(start: float) -> float:
     return (time.perf_counter() - start) * 1000
+
+
+def _request_has_body(request: Request) -> bool:
+    return request.method.upper() in {"POST", "PUT", "PATCH"}
+
+
+def _path_requires_api_key(path: str) -> bool:
+    return path != "/health"
+
+
+def _prediction_warnings(
+    *,
+    safety: ApiSafetySettings,
+    prediction: float | None,
+    freshness_seconds: float | None,
+) -> list[str]:
+    warnings: list[str] = []
+    stale_warning = safety.stale_feature_warning(freshness_seconds)
+    if stale_warning is not None:
+        warnings.append(stale_warning)
+    if prediction is not None:
+        prediction_warning = safety.prediction_warning(prediction)
+        if prediction_warning is not None:
+            warnings.append(prediction_warning)
+    return warnings
+
+
+def _api_key_headers(app: FastAPI) -> dict[str, str]:
+    safety = _get_safety(app)
+    if safety.api_key is None:
+        return {}
+    return {"X-API-Key": safety.api_key}
 
 
 __all__ = [

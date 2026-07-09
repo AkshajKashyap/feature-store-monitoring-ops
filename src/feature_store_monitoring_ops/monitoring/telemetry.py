@@ -60,13 +60,14 @@ class PredictionTelemetryLogger:
         model_name: str | None,
         model_version: str,
         latency_ms: float,
+        timestamp: datetime | None = None,
     ) -> dict[str, Any]:
         """Write a successful prediction telemetry row."""
 
-        timestamp = self.now_fn()
+        active_timestamp = timestamp or self.now_fn()
         row = _base_row(
             request_id=request_id,
-            timestamp=timestamp,
+            timestamp=active_timestamp,
             zone_id=zone_id,
             as_of_timestamp=as_of_timestamp,
             prediction=prediction,
@@ -76,7 +77,7 @@ class PredictionTelemetryLogger:
             status="success",
             error_type=None,
         )
-        row["feature_freshness_seconds"] = _feature_freshness_seconds(timestamp, as_of_timestamp)
+        row["feature_freshness_seconds"] = feature_freshness_seconds(active_timestamp, as_of_timestamp)
         self.write_row(row)
         return row
 
@@ -90,13 +91,14 @@ class PredictionTelemetryLogger:
         latency_ms: float,
         error_type: str,
         as_of_timestamp: str | None = None,
+        timestamp: datetime | None = None,
     ) -> dict[str, Any]:
         """Write a failed prediction telemetry row."""
 
-        timestamp = self.now_fn()
+        active_timestamp = timestamp or self.now_fn()
         row = _base_row(
             request_id=request_id,
-            timestamp=timestamp,
+            timestamp=active_timestamp,
             zone_id=zone_id,
             as_of_timestamp=as_of_timestamp,
             prediction=None,
@@ -108,7 +110,10 @@ class PredictionTelemetryLogger:
         )
         row["feature_freshness_seconds"] = None
         if as_of_timestamp is not None:
-            row["feature_freshness_seconds"] = _feature_freshness_seconds(timestamp, as_of_timestamp)
+            row["feature_freshness_seconds"] = feature_freshness_seconds(
+                active_timestamp,
+                as_of_timestamp,
+            )
         self.write_row(row)
         return row
 
@@ -172,7 +177,9 @@ def _base_row(
     }
 
 
-def _feature_freshness_seconds(timestamp: datetime, as_of_timestamp: str) -> float:
+def feature_freshness_seconds(timestamp: datetime, as_of_timestamp: str) -> float:
+    """Compute feature freshness in seconds from a request timestamp and as-of timestamp."""
+
     as_of = datetime.fromisoformat(as_of_timestamp.replace("Z", "+00:00"))
     if as_of.tzinfo is None:
         as_of = as_of.replace(tzinfo=UTC)
@@ -183,6 +190,7 @@ __all__ = [
     "IncrementingClock",
     "PredictionTelemetryLogger",
     "TelemetrySimulationResult",
+    "feature_freshness_seconds",
     "read_prediction_logs",
     "reset_prediction_log",
     "utc_now",

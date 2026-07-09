@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tomllib
+import json
 from pathlib import Path
 from typing import Sequence
 
@@ -10,6 +11,11 @@ from feature_store_monitoring_ops.cli import app as cli_app
 from feature_store_monitoring_ops.release_verification import (
     ReleaseCommandResult,
     generate_release_verification_report,
+)
+from feature_store_monitoring_ops.release_gate import (
+    RELEASE_GATE_DECISIONS,
+    ReleaseGatePaths,
+    run_release_gate,
 )
 from feature_store_monitoring_ops.workflow import (
     STAGE_PASSED,
@@ -60,6 +66,28 @@ def test_project_info_command_includes_capabilities_and_limitations() -> None:
     assert "workflow verification" in result.output
     assert "current_limitations:" in result.output
     assert "release_verification_report_path:" in result.output
+
+
+def test_release_gate_report_generation(tmp_path) -> None:
+    paths = _write_release_gate_inputs(tmp_path)
+
+    result = run_release_gate(paths=paths)
+
+    assert result.decision == "warn"
+    assert result.report_path.exists()
+    assert result.metrics_path.exists()
+    assert "Decision: `warn`" in result.report_path.read_text(encoding="utf-8")
+    payload = json.loads(result.metrics_path.read_text(encoding="utf-8"))
+    assert payload["decision"] == "warn"
+    assert payload["evidence"]["selected_model"] == "hist_gradient_boosting"
+
+
+def test_release_gate_decision_is_valid(tmp_path) -> None:
+    paths = _write_release_gate_inputs(tmp_path)
+
+    result = run_release_gate(paths=paths)
+
+    assert result.decision in RELEASE_GATE_DECISIONS
 
 
 def test_warning_filters_are_narrow_not_blanket_ignores() -> None:
@@ -147,3 +175,69 @@ def _fake_workflow_result(tmp_path: Path) -> DemoWorkflowResult:
         workflow_results_path=tmp_path / "workflow_results.json",
         portfolio_summary_path=tmp_path / "portfolio_summary.md",
     )
+
+
+def _write_release_gate_inputs(tmp_path: Path) -> ReleaseGatePaths:
+    model_metrics_path = tmp_path / "model_metrics.json"
+    serving_metrics_path = tmp_path / "serving_monitoring_metrics.json"
+    drift_metrics_path = tmp_path / "drift_monitoring_metrics.json"
+    storage_report_path = tmp_path / "storage_inspection_summary.md"
+    workflow_results_path = tmp_path / "workflow_results.json"
+    verification_report_path = tmp_path / "verification_0.1.0.md"
+    report_path = tmp_path / "release_gate_0.1.0.md"
+    metrics_path = tmp_path / "release_gate_0.1.0.json"
+    _write_json(
+        model_metrics_path,
+        {
+            "selected_model": "hist_gradient_boosting",
+            "test_metrics": {"mae": 6.2, "rmse": 7.9, "r2": 0.3},
+        },
+    )
+    _write_json(
+        serving_metrics_path,
+        {
+            "error_rate": 0.1,
+            "p95_latency_ms": 20.0,
+            "successful_predictions": 5,
+            "warnings": ["small sample"],
+        },
+    )
+    _write_json(
+        drift_metrics_path,
+        {
+            "warnings": ["sample too small"],
+            "data_quality": {"reference": {"passed": True}, "current": {"passed": True}},
+        },
+    )
+    storage_report_path.write_text("# Storage Inspection Summary\n", encoding="utf-8")
+    _write_json(
+        workflow_results_path,
+        {
+            "status": "passed",
+            "stages": [{"name": "inspect_storage"}, {"name": "inspect_relational_store"}],
+        },
+    )
+    verification_report_path.write_text(
+        "\n".join(
+            [
+                "# Release Verification 0.1.0",
+                "- Warning status: clean: no warnings emitted",
+                "- Docker availability: unavailable: docker command not found",
+            ],
+        ),
+        encoding="utf-8",
+    )
+    return ReleaseGatePaths(
+        model_metrics_path=model_metrics_path,
+        serving_metrics_path=serving_metrics_path,
+        drift_metrics_path=drift_metrics_path,
+        storage_inspection_report_path=storage_report_path,
+        workflow_results_path=workflow_results_path,
+        verification_report_path=verification_report_path,
+        report_path=report_path,
+        metrics_path=metrics_path,
+    )
+
+
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

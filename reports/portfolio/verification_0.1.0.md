@@ -4,10 +4,10 @@ Tracked release-quality verification report for the local deterministic system.
 
 ## Check Results
 
-- `pytest -q`: passed (7.770s)
-- `pytest -q -W default`: passed (6.319s)
+- `pytest -q`: passed (7.386s)
+- `pytest -q -W default`: passed (7.097s)
 - Warning status: clean: no warnings emitted
-- `ruff check .`: passed (0.014s)
+- `ruff check .`: passed (0.024s)
 - Demo workflow: passed
 - Docker availability: unavailable: The command 'docker' could not be found in this WSL 2 distro.
 

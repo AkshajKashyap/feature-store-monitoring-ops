@@ -16,6 +16,7 @@ This project demonstrates a production-style ML feature store and monitoring sys
 ## Current Metrics
 
 - Workflow status: passed
+- Current workflow preset: `default`
 - Selected model: `hist_gradient_boosting`
 - Test MAE: 6.29841
 - Test RMSE: 7.948043
@@ -31,6 +32,7 @@ This project demonstrates a production-style ML feature store and monitoring sys
 ```bash
 python -m pip install -e ".[dev]"
 make release-check
+feature-store-ops run-demo-workflow --preset portfolio
 cat reports/portfolio/portfolio_summary.md
 ```
 
@@ -39,7 +41,7 @@ cat reports/portfolio/portfolio_summary.md
 - Synthetic data only; no external production data source is connected yet.
 - Redis support is adapter-level unless a Redis server/client is configured.
 - SQLite storage is local development storage, not a production telemetry warehouse.
-- FastAPI serving is local; Docker, deployment, auth, and autoscaling are intentionally out of scope.
+- FastAPI serving is local; cloud deployment, auth, and autoscaling are intentionally out of scope.
 - Models are baseline forecasting models intended to validate the system path, not maximize accuracy.
 
 ## Primary Reports
@@ -47,6 +49,12 @@ cat reports/portfolio/portfolio_summary.md
 - `reports/portfolio/workflow_summary.md`
 - `reports/portfolio/workflow_results.json`
 - `reports/portfolio/portfolio_summary.md`
+- `reports/portfolio/portfolio_scale_summary.md`
 - `reports/model_metrics.json`
 - `reports/serving_monitoring_metrics.json`
 - `reports/drift_monitoring_metrics.json`
+
+## Demo Paths
+
+- Lightweight default: `feature-store-ops run-demo-workflow`
+- Portfolio scale: `feature-store-ops run-demo-workflow --preset portfolio`

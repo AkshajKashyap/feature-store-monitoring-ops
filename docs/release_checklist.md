@@ -27,6 +27,12 @@ This checklist covers the current local release-style gate for the Feature Store
 - Docker smoke writes `reports/portfolio/docker_smoke_summary.md`.
 - Docker Compose is shut down cleanly by the smoke script.
 
+## Optional Portfolio-Scale Check
+
+- `feature-store-ops run-demo-workflow --preset portfolio` runs the larger 50-zone, 30-day local scenario.
+- The portfolio-scale run writes `reports/portfolio/portfolio_scale_summary.md`.
+- Generated portfolio-scale data, artifacts, logs, and SQLite storage remain ignored by git.
+
 ## Intentionally Not Production-Ready Yet
 
 - Docker Compose is local-only and is not a cloud deployment target.

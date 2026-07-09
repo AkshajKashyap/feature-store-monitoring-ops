@@ -45,6 +45,7 @@ from feature_store_monitoring_ops.paths import (
     DEFAULT_ONLINE_FEATURE_REPORT_PATH,
     DEFAULT_ONLINE_FEATURE_SNAPSHOT_PATH,
     DEFAULT_PREDICTION_LOG_PATH,
+    DEFAULT_PORTFOLIO_SCALE_SUMMARY_PATH,
     DEFAULT_PORTFOLIO_SUMMARY_PATH,
     DEFAULT_SELECTED_MODEL_PATH,
     DEFAULT_SERVING_MONITORING_METRICS_PATH,
@@ -64,7 +65,8 @@ from feature_store_monitoring_ops.paths import (
 from feature_store_monitoring_ops.storage.config import StorageConfig
 from feature_store_monitoring_ops.storage.sync import inspect_storage, sync_storage
 from feature_store_monitoring_ops.synthetic_events import (
-    SyntheticEventConfig,
+    SYNTHETIC_PRESETS,
+    build_synthetic_event_config,
     generate_and_save_synthetic_events,
     parse_start_timestamp,
 )
@@ -132,34 +134,50 @@ def project_info() -> None:
     typer.echo(f"workflow_summary_path: {DEFAULT_WORKFLOW_SUMMARY_PATH}")
     typer.echo(f"workflow_results_path: {DEFAULT_WORKFLOW_RESULTS_PATH}")
     typer.echo(f"portfolio_summary_path: {DEFAULT_PORTFOLIO_SUMMARY_PATH}")
+    typer.echo(f"portfolio_scale_summary_path: {DEFAULT_PORTFOLIO_SCALE_SUMMARY_PATH}")
 
 
 @app.command("generate-synthetic-events")
 def generate_synthetic_events_command(
+    preset: Annotated[
+        str,
+        typer.Option("--preset", help=f"Synthetic scale preset: {', '.join(SYNTHETIC_PRESETS)}."),
+    ] = "default",
     events: Annotated[
-        int,
+        int | None,
         typer.Option("--events", help="Number of synthetic event rows to generate."),
-    ] = 720,
+    ] = None,
     seed: Annotated[
-        int,
+        int | None,
         typer.Option("--seed", help="Random seed used for deterministic generation."),
-    ] = 42,
+    ] = None,
     start: Annotated[
         str,
         typer.Option("--start", help="ISO-8601 start timestamp for the generated series."),
     ] = "2026-01-01T00:00:00+00:00",
     interval_minutes: Annotated[
-        int,
+        int | None,
         typer.Option("--interval-minutes", help="Minutes between generated event timestamps."),
-    ] = 60,
+    ] = None,
     zones: Annotated[
-        int,
+        int | None,
         typer.Option("--zones", help="Number of zone IDs to sample."),
-    ] = 5,
+    ] = None,
     users: Annotated[
-        int,
+        int | None,
         typer.Option("--users", help="Number of user IDs to sample."),
-    ] = 200,
+    ] = None,
+    days: Annotated[
+        int | None,
+        typer.Option("--days", help="Number of days for deterministic zone/day grid generation."),
+    ] = None,
+    events_per_zone_per_day: Annotated[
+        int | None,
+        typer.Option(
+            "--events-per-zone-per-day",
+            help="Rows per zone per day for deterministic zone/day grid generation.",
+        ),
+    ] = None,
     output_path: Annotated[
         Path,
         typer.Option("--output-path", help="CSV path for generated synthetic events."),
@@ -172,13 +190,16 @@ def generate_synthetic_events_command(
     """Generate deterministic synthetic temporal demand events."""
 
     try:
-        config = SyntheticEventConfig(
+        config = build_synthetic_event_config(
+            preset=preset,
             num_events=events,
             seed=seed,
             start_timestamp=parse_start_timestamp(start),
             interval_minutes=interval_minutes,
             zone_count=zones,
             user_count=users,
+            num_days=days,
+            events_per_zone_per_day=events_per_zone_per_day,
         )
         result = generate_and_save_synthetic_events(
             config=config,
@@ -449,6 +470,10 @@ def simulate_traffic_command(
         str,
         typer.Option("--unknown-zone-id", help="Unknown zone used to generate an error log."),
     ] = "unknown_zone",
+    requests: Annotated[
+        int | None,
+        typer.Option("--requests", help="Total simulated prediction requests, including one error."),
+    ] = None,
     reset_log: Annotated[
         bool,
         typer.Option("--reset-log/--append-log", help="Reset telemetry log before simulation."),
@@ -470,7 +495,11 @@ def simulate_traffic_command(
     )
     api_app = create_api_app(artifacts=artifacts, telemetry_logger=logger)
     try:
-        result = run_api_traffic_simulation(api_app, unknown_zone_id=unknown_zone_id)
+        result = run_api_traffic_simulation(
+            api_app,
+            unknown_zone_id=unknown_zone_id,
+            request_count=requests,
+        )
     except RuntimeError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
@@ -730,22 +759,59 @@ def inspect_storage_command(
 
 @app.command("run-demo-workflow")
 def run_demo_workflow_command(
+    preset: Annotated[
+        str,
+        typer.Option("--preset", help=f"Workflow scale preset: {', '.join(SYNTHETIC_PRESETS)}."),
+    ] = "default",
     output_root: Annotated[
         Path,
         typer.Option("--output-root", help="Root directory for demo workflow outputs."),
     ] = PROJECT_ROOT,
     events: Annotated[
-        int,
+        int | None,
         typer.Option("--events", help="Number of synthetic events for the demo workflow."),
-    ] = 720,
+    ] = None,
     seed: Annotated[
-        int,
+        int | None,
         typer.Option("--seed", help="Synthetic event seed for deterministic workflow runs."),
-    ] = 42,
+    ] = None,
+    zones: Annotated[
+        int | None,
+        typer.Option("--zones", help="Number of synthetic zones for the demo workflow."),
+    ] = None,
+    users: Annotated[
+        int | None,
+        typer.Option("--users", help="Number of synthetic users for the demo workflow."),
+    ] = None,
+    days: Annotated[
+        int | None,
+        typer.Option("--days", help="Number of days for zone/day grid synthetic generation."),
+    ] = None,
+    events_per_zone_per_day: Annotated[
+        int | None,
+        typer.Option("--events-per-zone-per-day", help="Rows per zone per day for grid generation."),
+    ] = None,
+    traffic_requests: Annotated[
+        int | None,
+        typer.Option("--traffic-requests", help="Total simulated prediction requests."),
+    ] = None,
 ) -> None:
     """Run the full deterministic local demo workflow."""
 
-    config = DemoWorkflowConfig(output_root=output_root, num_events=events, seed=seed)
+    try:
+        config = DemoWorkflowConfig.from_preset(
+            preset=preset,
+            output_root=output_root,
+            num_events=events,
+            seed=seed,
+            zone_count=zones,
+            user_count=users,
+            num_days=days,
+            events_per_zone_per_day=events_per_zone_per_day,
+            traffic_request_count=traffic_requests,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     result = run_demo_workflow(config)
     for stage in result.stages:
         typer.echo(f"{stage.name}: {stage.status}")

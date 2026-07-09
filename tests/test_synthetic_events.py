@@ -13,7 +13,9 @@ from feature_store_monitoring_ops.schema import (
     parse_event_timestamp,
 )
 from feature_store_monitoring_ops.synthetic_events import (
+    PORTFOLIO_SYNTHETIC_PRESET,
     SyntheticEventConfig,
+    build_synthetic_event_config,
     generate_synthetic_events,
 )
 
@@ -54,6 +56,34 @@ def test_synthetic_event_demand_values_are_nonnegative() -> None:
         assert float(row["observed_demand"]) >= 0
 
 
+def test_generator_accepts_custom_scale_params() -> None:
+    config = SyntheticEventConfig(
+        seed=21,
+        zone_count=4,
+        user_count=25,
+        num_days=3,
+        events_per_zone_per_day=2,
+    )
+
+    rows = generate_synthetic_events(config)
+
+    assert len(rows) == 24
+    assert len({row["zone_id"] for row in rows}) == 4
+    assert rows[0]["zone_id"] == "zone_01"
+    assert rows[3]["zone_id"] == "zone_04"
+
+
+def test_portfolio_preset_produces_more_zones_than_default() -> None:
+    default_rows = generate_synthetic_events(build_synthetic_event_config())
+    portfolio_rows = generate_synthetic_events(
+        build_synthetic_event_config(preset=PORTFOLIO_SYNTHETIC_PRESET),
+    )
+
+    assert len({row["zone_id"] for row in default_rows}) == 5
+    assert len({row["zone_id"] for row in portfolio_rows}) >= 50
+    assert len(portfolio_rows) > len(default_rows)
+
+
 def test_cli_smoke_generates_events_and_report(tmp_path) -> None:
     runner = CliRunner()
     csv_path = tmp_path / "synthetic_events.csv"
@@ -91,3 +121,28 @@ def test_cli_smoke_generates_events_and_report(tmp_path) -> None:
     assert len(rows) == 8
     ensure_valid_synthetic_event_rows(rows)
     assert "Rows: 8" in report_path.read_text(encoding="utf-8")
+
+
+def test_cli_generates_portfolio_preset(tmp_path) -> None:
+    runner = CliRunner()
+    csv_path = tmp_path / "synthetic_events.csv"
+    report_path = tmp_path / "synthetic_events_summary.md"
+
+    result = runner.invoke(
+        app,
+        [
+            "generate-synthetic-events",
+            "--preset",
+            "portfolio",
+            "--output-path",
+            str(csv_path),
+            "--report-path",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    with csv_path.open(encoding="utf-8", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert len(rows) == 3000
+    assert len({row["zone_id"] for row in rows}) == 50

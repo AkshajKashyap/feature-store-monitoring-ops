@@ -218,10 +218,17 @@ def run_api_traffic_simulation(
     app: FastAPI,
     *,
     unknown_zone_id: str = "unknown_zone",
+    request_count: int | None = None,
 ) -> TelemetrySimulationResult:
     """Run deterministic in-process prediction traffic against known zones plus one unknown zone."""
 
-    return asyncio.run(_run_api_traffic_simulation_async(app, unknown_zone_id=unknown_zone_id))
+    return asyncio.run(
+        _run_api_traffic_simulation_async(
+            app,
+            unknown_zone_id=unknown_zone_id,
+            request_count=request_count,
+        ),
+    )
 
 
 def write_api_serving_report(
@@ -299,13 +306,18 @@ async def _run_api_traffic_simulation_async(
     app: FastAPI,
     *,
     unknown_zone_id: str,
+    request_count: int | None,
 ) -> TelemetrySimulationResult:
     context = _get_context(app)
     if not context.is_ready:
         raise RuntimeError(f"API is not ready: {context.load_errors}")
     assert context.feature_store is not None
     known_zones = sorted(str(row["zone_id"]) for row in context.feature_store.all_rows())
-    zones = [*known_zones, unknown_zone_id]
+    zones = _traffic_zone_sequence(
+        known_zones=known_zones,
+        unknown_zone_id=unknown_zone_id,
+        request_count=request_count,
+    )
     successful_requests = 0
     failed_requests = 0
 
@@ -325,6 +337,28 @@ async def _run_api_traffic_simulation_async(
         failed_requests=failed_requests,
         zones_requested=zones,
     )
+
+
+def _traffic_zone_sequence(
+    *,
+    known_zones: list[str],
+    unknown_zone_id: str,
+    request_count: int | None,
+) -> list[str]:
+    if request_count is None:
+        return [*known_zones, unknown_zone_id]
+    if request_count <= 0:
+        raise RuntimeError("traffic simulation request_count must be greater than zero")
+    if not known_zones and request_count > 1:
+        raise RuntimeError("traffic simulation needs known zones for successful requests")
+
+    successful_request_count = max(0, request_count - 1)
+    zones = [
+        known_zones[index % len(known_zones)]
+        for index in range(successful_request_count)
+    ]
+    zones.append(unknown_zone_id)
+    return zones
 
 
 def _assert_success(status_code: int, endpoint: str) -> None:

@@ -10,6 +10,7 @@ import pandas as pd
 from typer.testing import CliRunner
 
 from feature_store_monitoring_ops.api.app import create_app
+from feature_store_monitoring_ops.api.app import run_api_traffic_simulation
 from feature_store_monitoring_ops.api.service import ServingArtifacts
 from feature_store_monitoring_ops.cli import app as cli_app
 from feature_store_monitoring_ops.features.contract import (
@@ -123,6 +124,19 @@ def test_serve_api_cli_smoke_behavior(tmp_path) -> None:
     assert "api smoke test passed" in result.output
     assert report_path.exists()
     assert "Status: passed" in report_path.read_text(encoding="utf-8")
+
+
+def test_traffic_simulator_supports_configurable_request_count(tmp_path) -> None:
+    artifacts = _write_serving_artifacts(tmp_path)
+    telemetry_logger = PredictionTelemetryLogger(log_path=tmp_path / "predictions.jsonl")
+    app = create_app(artifacts=artifacts, telemetry_logger=telemetry_logger)
+
+    result = run_api_traffic_simulation(app, request_count=7)
+
+    assert result.total_requests == 7
+    assert result.successful_requests == 6
+    assert result.failed_requests == 1
+    assert result.zones_requested[-1] == "unknown_zone"
 
 
 class InProcessTestClient:

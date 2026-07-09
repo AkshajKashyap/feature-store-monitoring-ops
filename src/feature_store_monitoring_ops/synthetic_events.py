@@ -21,6 +21,9 @@ from feature_store_monitoring_ops.schema import (
 )
 
 DEFAULT_START_TIMESTAMP = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
+DEFAULT_SYNTHETIC_PRESET = "default"
+PORTFOLIO_SYNTHETIC_PRESET = "portfolio"
+SYNTHETIC_PRESETS: tuple[str, ...] = (DEFAULT_SYNTHETIC_PRESET, PORTFOLIO_SYNTHETIC_PRESET)
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,8 @@ class SyntheticEventConfig:
     interval_minutes: int = 60
     zone_count: int = 5
     user_count: int = 200
+    num_days: int | None = None
+    events_per_zone_per_day: int | None = None
 
     def validate(self) -> None:
         """Validate config values before event generation."""
@@ -45,6 +50,30 @@ class SyntheticEventConfig:
             raise ValueError("zone_count must be greater than zero")
         if self.user_count <= 0:
             raise ValueError("user_count must be greater than zero")
+        if (self.num_days is None) != (self.events_per_zone_per_day is None):
+            raise ValueError("num_days and events_per_zone_per_day must be provided together")
+        if self.num_days is not None and self.num_days <= 0:
+            raise ValueError("num_days must be greater than zero")
+        if self.events_per_zone_per_day is not None and self.events_per_zone_per_day <= 0:
+            raise ValueError("events_per_zone_per_day must be greater than zero")
+        if self.events_per_zone_per_day is not None and self.events_per_zone_per_day > 1440:
+            raise ValueError("events_per_zone_per_day must be less than or equal to 1440")
+
+    @property
+    def uses_zone_day_grid(self) -> bool:
+        """Return whether generation should cover every zone for every configured day."""
+
+        return self.num_days is not None and self.events_per_zone_per_day is not None
+
+    @property
+    def expected_rows(self) -> int:
+        """Return the deterministic row count implied by this config."""
+
+        if self.uses_zone_day_grid:
+            assert self.num_days is not None
+            assert self.events_per_zone_per_day is not None
+            return self.zone_count * self.num_days * self.events_per_zone_per_day
+        return self.num_events
 
 
 @dataclass(frozen=True)
@@ -66,43 +95,54 @@ def generate_synthetic_events(
     rng = random.Random(active_config.seed)
 
     rows: list[dict[str, object]] = []
-    for event_index in range(active_config.num_events):
-        timestamp = active_config.start_timestamp + timedelta(
-            minutes=active_config.interval_minutes * event_index,
-        )
-        hour = timestamp.hour
-        day_of_week = timestamp.weekday()
-        is_weekend = day_of_week >= 5
-        zone_number = rng.randint(1, active_config.zone_count)
-        user_number = rng.randint(1, active_config.user_count)
-
-        base_demand = _base_temporal_demand(
-            event_index=event_index,
-            total_events=active_config.num_events,
-            hour=hour,
-            day_of_week=day_of_week,
-            zone_number=zone_number,
-        )
-        observed_demand = max(0.0, base_demand + rng.gauss(0.0, max(1.0, base_demand * 0.08)))
-        demand_count = max(0, int(round(observed_demand)))
-
+    for event_index, timestamp, zone_number in _event_schedule(active_config):
         rows.append(
-            {
-                "event_id": f"evt_{event_index + 1:06d}",
-                "timestamp": timestamp.isoformat(),
-                "zone_id": f"zone_{zone_number:02d}",
-                "user_id": f"user_{user_number:04d}",
-                "demand_count": demand_count,
-                "hour": hour,
-                "day_of_week": day_of_week,
-                "is_weekend": is_weekend,
-                "base_demand": round(base_demand, 3),
-                "observed_demand": round(observed_demand, 3),
-            },
+            _build_event_row(
+                config=active_config,
+                rng=rng,
+                event_index=event_index,
+                timestamp=timestamp,
+                zone_number=zone_number,
+            ),
         )
 
     ensure_valid_synthetic_event_rows(rows)
     return rows
+
+
+def build_synthetic_event_config(
+    *,
+    preset: str = DEFAULT_SYNTHETIC_PRESET,
+    num_events: int | None = None,
+    seed: int | None = None,
+    start_timestamp: datetime | None = None,
+    interval_minutes: int | None = None,
+    zone_count: int | None = None,
+    user_count: int | None = None,
+    num_days: int | None = None,
+    events_per_zone_per_day: int | None = None,
+) -> SyntheticEventConfig:
+    """Build a synthetic event config from a named preset and optional overrides."""
+
+    preset_config = _synthetic_config_for_preset(preset)
+    config = SyntheticEventConfig(
+        num_events=num_events if num_events is not None else preset_config.num_events,
+        seed=seed if seed is not None else preset_config.seed,
+        start_timestamp=start_timestamp or preset_config.start_timestamp,
+        interval_minutes=(
+            interval_minutes if interval_minutes is not None else preset_config.interval_minutes
+        ),
+        zone_count=zone_count if zone_count is not None else preset_config.zone_count,
+        user_count=user_count if user_count is not None else preset_config.user_count,
+        num_days=num_days if num_days is not None else preset_config.num_days,
+        events_per_zone_per_day=(
+            events_per_zone_per_day
+            if events_per_zone_per_day is not None
+            else preset_config.events_per_zone_per_day
+        ),
+    )
+    config.validate()
+    return config
 
 
 def generate_and_save_synthetic_events(
@@ -186,6 +226,89 @@ def parse_start_timestamp(value: str) -> datetime:
     return timestamp
 
 
+def _synthetic_config_for_preset(preset: str) -> SyntheticEventConfig:
+    if preset == DEFAULT_SYNTHETIC_PRESET:
+        return SyntheticEventConfig()
+    if preset == PORTFOLIO_SYNTHETIC_PRESET:
+        return SyntheticEventConfig(
+            seed=42,
+            zone_count=50,
+            user_count=5000,
+            num_days=30,
+            events_per_zone_per_day=2,
+        )
+    raise ValueError(f"unknown synthetic event preset: {preset}")
+
+
+def _event_schedule(
+    config: SyntheticEventConfig,
+) -> list[tuple[int, datetime, int]]:
+    if not config.uses_zone_day_grid:
+        return [
+            (
+                event_index,
+                config.start_timestamp + timedelta(minutes=config.interval_minutes * event_index),
+                0,
+            )
+            for event_index in range(config.num_events)
+        ]
+
+    assert config.num_days is not None
+    assert config.events_per_zone_per_day is not None
+    slot_minutes = max(1, (24 * 60) // config.events_per_zone_per_day)
+    schedule: list[tuple[int, datetime, int]] = []
+    event_index = 0
+    for day_index in range(config.num_days):
+        for slot_index in range(config.events_per_zone_per_day):
+            timestamp = config.start_timestamp + timedelta(
+                days=day_index,
+                minutes=slot_minutes * slot_index,
+            )
+            for zone_number in range(1, config.zone_count + 1):
+                schedule.append((event_index, timestamp, zone_number))
+                event_index += 1
+    return schedule
+
+
+def _build_event_row(
+    *,
+    config: SyntheticEventConfig,
+    rng: random.Random,
+    event_index: int,
+    timestamp: datetime,
+    zone_number: int,
+) -> dict[str, object]:
+    hour = timestamp.hour
+    day_of_week = timestamp.weekday()
+    is_weekend = day_of_week >= 5
+    if zone_number <= 0:
+        zone_number = rng.randint(1, config.zone_count)
+    user_number = rng.randint(1, config.user_count)
+
+    base_demand = _base_temporal_demand(
+        event_index=event_index,
+        total_events=config.expected_rows,
+        hour=hour,
+        day_of_week=day_of_week,
+        zone_number=zone_number,
+    )
+    observed_demand = max(0.0, base_demand + rng.gauss(0.0, max(1.0, base_demand * 0.08)))
+    demand_count = max(0, int(round(observed_demand)))
+
+    return {
+        "event_id": f"evt_{event_index + 1:06d}",
+        "timestamp": timestamp.isoformat(),
+        "zone_id": f"zone_{zone_number:02d}",
+        "user_id": f"user_{user_number:04d}",
+        "demand_count": demand_count,
+        "hour": hour,
+        "day_of_week": day_of_week,
+        "is_weekend": is_weekend,
+        "base_demand": round(base_demand, 3),
+        "observed_demand": round(observed_demand, 3),
+    }
+
+
 def _base_temporal_demand(
     *,
     event_index: int,
@@ -214,8 +337,12 @@ def _base_temporal_demand(
 
 __all__ = [
     "DEFAULT_START_TIMESTAMP",
+    "DEFAULT_SYNTHETIC_PRESET",
+    "PORTFOLIO_SYNTHETIC_PRESET",
+    "SYNTHETIC_PRESETS",
     "SyntheticEventConfig",
     "SyntheticGenerationResult",
+    "build_synthetic_event_config",
     "build_synthetic_events_summary",
     "generate_and_save_synthetic_events",
     "generate_synthetic_events",

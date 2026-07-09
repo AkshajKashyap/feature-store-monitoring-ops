@@ -30,7 +30,11 @@ from feature_store_monitoring_ops.paths import PROJECT_ROOT
 from feature_store_monitoring_ops.storage.config import StorageConfig
 from feature_store_monitoring_ops.storage.sync import inspect_storage, sync_storage
 from feature_store_monitoring_ops.synthetic_events import (
+    DEFAULT_SYNTHETIC_PRESET,
+    PORTFOLIO_SYNTHETIC_PRESET,
+    SYNTHETIC_PRESETS,
     SyntheticEventConfig,
+    build_synthetic_event_config,
     generate_and_save_synthetic_events,
 )
 
@@ -57,11 +61,60 @@ class DemoWorkflowConfig:
     """Configuration for the deterministic local demo workflow."""
 
     output_root: Path = PROJECT_ROOT
+    preset: str = DEFAULT_SYNTHETIC_PRESET
     num_events: int = 720
     seed: int = 42
     start_timestamp: datetime = datetime(2026, 1, 1, tzinfo=UTC)
+    interval_minutes: int = 60
+    zone_count: int = 5
+    user_count: int = 200
+    num_days: int | None = None
+    events_per_zone_per_day: int | None = None
     traffic_base_timestamp: datetime = datetime(2026, 2, 1, tzinfo=UTC)
+    traffic_request_count: int | None = None
     storage_config: StorageConfig = field(default_factory=StorageConfig)
+
+    @classmethod
+    def from_preset(
+        cls,
+        *,
+        preset: str = DEFAULT_SYNTHETIC_PRESET,
+        output_root: Path = PROJECT_ROOT,
+        num_events: int | None = None,
+        seed: int | None = None,
+        zone_count: int | None = None,
+        user_count: int | None = None,
+        num_days: int | None = None,
+        events_per_zone_per_day: int | None = None,
+        traffic_request_count: int | None = None,
+    ) -> DemoWorkflowConfig:
+        """Build workflow config from a named synthetic scale preset."""
+
+        synthetic_config = build_synthetic_event_config(
+            preset=preset,
+            num_events=num_events,
+            seed=seed,
+            zone_count=zone_count,
+            user_count=user_count,
+            num_days=num_days,
+            events_per_zone_per_day=events_per_zone_per_day,
+        )
+        default_traffic_count = None
+        if preset == PORTFOLIO_SYNTHETIC_PRESET:
+            default_traffic_count = 120
+        return cls(
+            output_root=output_root,
+            preset=preset,
+            num_events=synthetic_config.num_events,
+            seed=synthetic_config.seed,
+            start_timestamp=synthetic_config.start_timestamp,
+            interval_minutes=synthetic_config.interval_minutes,
+            zone_count=synthetic_config.zone_count,
+            user_count=synthetic_config.user_count,
+            num_days=synthetic_config.num_days,
+            events_per_zone_per_day=synthetic_config.events_per_zone_per_day,
+            traffic_request_count=traffic_request_count or default_traffic_count,
+        )
 
     @property
     def synthetic_events_path(self) -> Path:
@@ -164,6 +217,10 @@ class DemoWorkflowConfig:
         return self.output_root / "reports" / "portfolio" / "portfolio_summary.md"
 
     @property
+    def portfolio_scale_summary_path(self) -> Path:
+        return self.output_root / "reports" / "portfolio" / "portfolio_scale_summary.md"
+
+    @property
     def sqlite_path(self) -> Path:
         return self.output_root / "artifacts" / "storage" / "telemetry.db"
 
@@ -171,6 +228,20 @@ class DemoWorkflowConfig:
         """Return storage config scoped to this workflow output root."""
 
         return self.storage_config.with_overrides(sqlite_path=self.sqlite_path)
+
+    def synthetic_event_config(self) -> SyntheticEventConfig:
+        """Return the synthetic event generator config for this workflow."""
+
+        return SyntheticEventConfig(
+            num_events=self.num_events,
+            seed=self.seed,
+            start_timestamp=self.start_timestamp,
+            interval_minutes=self.interval_minutes,
+            zone_count=self.zone_count,
+            user_count=self.user_count,
+            num_days=self.num_days,
+            events_per_zone_per_day=self.events_per_zone_per_day,
+        )
 
 
 @dataclass(frozen=True)
@@ -203,6 +274,8 @@ class DemoWorkflowResult:
     workflow_summary_path: Path
     workflow_results_path: Path
     portfolio_summary_path: Path
+    portfolio_scale_summary_path: Path | None = None
+    preset: str = DEFAULT_SYNTHETIC_PRESET
 
     @property
     def status(self) -> str:
@@ -227,6 +300,11 @@ class DemoWorkflowResult:
                 "workflow_summary": str(self.workflow_summary_path),
                 "workflow_results": str(self.workflow_results_path),
                 "portfolio_summary": str(self.portfolio_summary_path),
+                "portfolio_scale_summary": (
+                    str(self.portfolio_scale_summary_path)
+                    if self.portfolio_scale_summary_path is not None
+                    else None
+                ),
             },
         }
 
@@ -269,6 +347,8 @@ def run_demo_workflow(
         workflow_summary_path=active_config.workflow_summary_path,
         workflow_results_path=active_config.workflow_results_path,
         portfolio_summary_path=active_config.portfolio_summary_path,
+        portfolio_scale_summary_path=active_config.portfolio_scale_summary_path,
+        preset=active_config.preset,
     )
     _write_workflow_reports(result, active_config)
     return result
@@ -295,6 +375,7 @@ def build_workflow_summary(result: DemoWorkflowResult) -> str:
             "One-command local demo workflow for Milestone 9.",
             "",
             f"- Overall status: {result.status}",
+            f"- Preset: `{result.preset}`",
             "",
             "## Stages",
             "",
@@ -331,6 +412,7 @@ def build_portfolio_summary(result: DemoWorkflowResult) -> str:
             "```bash",
             "python -m pip install -e \".[dev]\"",
             "make release-check",
+            "feature-store-ops run-demo-workflow --preset portfolio",
             "cat reports/portfolio/portfolio_summary.md",
             "```",
         ],
@@ -340,7 +422,7 @@ def build_portfolio_summary(result: DemoWorkflowResult) -> str:
             "- Synthetic data only; no external production data source is connected yet.",
             "- Redis support is adapter-level unless a Redis server/client is configured.",
             "- SQLite storage is local development storage, not a production telemetry warehouse.",
-            "- FastAPI serving is local; Docker, deployment, auth, and autoscaling are intentionally out of scope.",
+            "- FastAPI serving is local; cloud deployment, auth, and autoscaling are intentionally out of scope.",
             "- Models are baseline forecasting models intended to validate the system path, not maximize accuracy.",
         ],
     )
@@ -359,6 +441,7 @@ def build_portfolio_summary(result: DemoWorkflowResult) -> str:
             "## Current Metrics",
             "",
             f"- Workflow status: {result.status}",
+            f"- Current workflow preset: `{result.preset}`",
             f"- Selected model: `{metrics.get('selected_model', 'n/a')}`",
             f"- Test MAE: {_format_optional_metric(metrics.get('test_mae'))}",
             f"- Test RMSE: {_format_optional_metric(metrics.get('test_rmse'))}",
@@ -383,9 +466,48 @@ def build_portfolio_summary(result: DemoWorkflowResult) -> str:
             "- `reports/portfolio/workflow_summary.md`",
             "- `reports/portfolio/workflow_results.json`",
             "- `reports/portfolio/portfolio_summary.md`",
+            "- `reports/portfolio/portfolio_scale_summary.md`",
             "- `reports/model_metrics.json`",
             "- `reports/serving_monitoring_metrics.json`",
             "- `reports/drift_monitoring_metrics.json`",
+            "",
+            "## Demo Paths",
+            "",
+            "- Lightweight default: `feature-store-ops run-demo-workflow`",
+            "- Portfolio scale: `feature-store-ops run-demo-workflow --preset portfolio`",
+            "",
+        ],
+    )
+
+
+def build_portfolio_scale_summary(result: DemoWorkflowResult) -> str:
+    """Build a focused report for the portfolio-scale workflow preset."""
+
+    metrics = _final_metrics(result)
+    return "\n".join(
+        [
+            "# Portfolio Scale Summary",
+            "",
+            "Portfolio-scale deterministic workflow run with richer temporal and zone coverage.",
+            "",
+            f"- Workflow status: {result.status}",
+            f"- Preset: `{result.preset}`",
+            f"- Synthetic rows: {_format_optional_metric(metrics.get('synthetic_rows'))}",
+            f"- Configured zones: {_format_optional_metric(metrics.get('configured_zones'))}",
+            f"- Configured users: {_format_optional_metric(metrics.get('configured_users'))}",
+            f"- Configured days: {_format_optional_metric(metrics.get('configured_days'))}",
+            f"- Events per zone per day: "
+            f"{_format_optional_metric(metrics.get('events_per_zone_per_day'))}",
+            f"- Offline feature rows: {_format_optional_metric(metrics.get('offline_rows'))}",
+            f"- Online feature rows: {_format_optional_metric(metrics.get('online_feature_rows'))}",
+            f"- Simulated prediction requests: "
+            f"{_format_optional_metric(metrics.get('simulated_requests'))}",
+            f"- SQLite telemetry rows: {_format_optional_metric(metrics.get('telemetry_rows'))}",
+            "",
+            "## Notes",
+            "",
+            "- Generated data, model artifacts, logs, and SQLite files remain ignored by git.",
+            "- This preset is larger than the default demo but remains local and CPU-only.",
             "",
         ],
     )
@@ -407,12 +529,9 @@ def _stage_functions() -> list[tuple[str, Callable[[DemoWorkflowConfig], Workflo
 
 
 def _stage_generate_synthetic_events(config: DemoWorkflowConfig) -> WorkflowStageResult:
+    synthetic_config = config.synthetic_event_config()
     result = generate_and_save_synthetic_events(
-        config=SyntheticEventConfig(
-            num_events=config.num_events,
-            seed=config.seed,
-            start_timestamp=config.start_timestamp,
-        ),
+        config=synthetic_config,
         output_path=config.synthetic_events_path,
         report_path=config.synthetic_report_path,
     )
@@ -423,7 +542,15 @@ def _stage_generate_synthetic_events(config: DemoWorkflowConfig) -> WorkflowStag
             "synthetic_events": str(result.csv_path),
             "summary_report": str(result.report_path),
         },
-        metrics={"rows_written": result.rows_written, "seed": config.seed},
+        metrics={
+            "rows_written": result.rows_written,
+            "seed": config.seed,
+            "preset": config.preset,
+            "zone_count": config.zone_count,
+            "user_count": config.user_count,
+            "num_days": config.num_days,
+            "events_per_zone_per_day": config.events_per_zone_per_day,
+        },
     )
 
 
@@ -531,7 +658,7 @@ def _stage_simulate_traffic(config: DemoWorkflowConfig) -> WorkflowStageResult:
             now_fn=IncrementingClock(config.traffic_base_timestamp),
         ),
     )
-    result = run_api_traffic_simulation(app)
+    result = run_api_traffic_simulation(app, request_count=config.traffic_request_count)
     return WorkflowStageResult(
         name="simulate_traffic",
         status=STAGE_PASSED,
@@ -652,6 +779,11 @@ def _write_workflow_reports(result: DemoWorkflowResult, config: DemoWorkflowConf
         encoding="utf-8",
     )
     config.portfolio_summary_path.write_text(build_portfolio_summary(result), encoding="utf-8")
+    if config.preset == PORTFOLIO_SYNTHETIC_PRESET:
+        config.portfolio_scale_summary_path.write_text(
+            build_portfolio_scale_summary(result),
+            encoding="utf-8",
+        )
 
 
 def _serving_artifacts(config: DemoWorkflowConfig) -> ServingArtifacts:
@@ -666,7 +798,15 @@ def _serving_artifacts(config: DemoWorkflowConfig) -> ServingArtifacts:
 def _final_metrics(result: DemoWorkflowResult) -> dict[str, Any]:
     metrics: dict[str, Any] = {}
     for stage in result.stages:
-        if stage.name == "train_model":
+        if stage.name == "generate_synthetic_events":
+            metrics["synthetic_rows"] = stage.metrics.get("rows_written")
+            metrics["configured_zones"] = stage.metrics.get("zone_count")
+            metrics["configured_users"] = stage.metrics.get("user_count")
+            metrics["configured_days"] = stage.metrics.get("num_days")
+            metrics["events_per_zone_per_day"] = stage.metrics.get("events_per_zone_per_day")
+        elif stage.name == "build_offline_features":
+            metrics["offline_rows"] = stage.metrics.get("offline")
+        elif stage.name == "train_model":
             metrics["selected_model"] = stage.metrics.get("selected_model")
             metrics["test_mae"] = stage.metrics.get("test_mae")
             metrics["test_rmse"] = stage.metrics.get("test_rmse")
@@ -700,12 +840,15 @@ def _format_optional_metric(value: object) -> str:
 __all__ = [
     "DemoWorkflowConfig",
     "DemoWorkflowResult",
+    "PORTFOLIO_SYNTHETIC_PRESET",
+    "SYNTHETIC_PRESETS",
     "STAGE_FAILED",
     "STAGE_PASSED",
     "STAGE_SKIPPED",
     "WORKFLOW_STAGE_ORDER",
     "WorkflowStageResult",
     "build_portfolio_summary",
+    "build_portfolio_scale_summary",
     "build_workflow_summary",
     "run_demo_workflow",
 ]

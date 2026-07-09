@@ -3,12 +3,13 @@
 One-command local demo workflow for Milestone 9.
 
 - Overall status: passed
+- Preset: `default`
 
 ## Stages
 
 | Stage | Status | Key Metrics | Error |
 | --- | --- | --- | --- |
-| `generate_synthetic_events` | passed | `rows_written`=720, `seed`=42 |  |
+| `generate_synthetic_events` | passed | `rows_written`=720, `seed`=42, `preset`=default, `zone_count`=5 |  |
 | `build_offline_features` | passed | `offline`=595, `train`=416, `validation`=89, `test`=90 |  |
 | `train_model` | passed | `selected_model`=hist_gradient_boosting, `test_mae`=6.29841, `test_rmse`=7.948043, `test_r2`=0.313692 |  |
 | `materialize_online_features` | passed | `row_count`=5 |  |
@@ -24,3 +25,4 @@ One-command local demo workflow for Milestone 9.
 - `workflow_summary`: `/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/workflow_summary.md`
 - `workflow_results`: `/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/workflow_results.json`
 - `portfolio_summary`: `/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/portfolio_summary.md`
+- `portfolio_scale_summary`: `/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/portfolio_scale_summary.md`

@@ -382,6 +382,7 @@ This milestone adds a one-command deterministic local workflow and release-style
 
 ```bash
 feature-store-ops run-demo-workflow
+feature-store-ops run-demo-workflow --preset portfolio
 ```
 
 Or use Make:
@@ -409,6 +410,7 @@ It writes tracked portfolio outputs:
 - `reports/portfolio/workflow_summary.md`
 - `reports/portfolio/workflow_results.json`
 - `reports/portfolio/portfolio_summary.md`
+- `reports/portfolio/portfolio_scale_summary.md` when the portfolio preset runs
 
 The release checklist is tracked at:
 
@@ -446,3 +448,44 @@ Docker files:
 The API defaults to JSON-backed online features. Set `FEATURE_STORE_OPS_ONLINE_BACKEND=redis` and `FEATURE_STORE_OPS_REDIS_URL=redis://redis:6379/0` to use Redis in Docker Compose.
 
 Docker remains optional. `make release-check` does not require Docker.
+
+## Milestone 11: Portfolio-Scale Scenario
+
+This milestone adds configurable synthetic scale controls and a named portfolio preset. The default workflow remains lightweight for fast local checks, while the portfolio preset demonstrates richer temporal and entity coverage.
+
+### Lightweight Demo
+
+```bash
+feature-store-ops run-demo-workflow
+```
+
+Default scale:
+
+- 720 synthetic events
+- 5 zones
+- 5 online feature rows
+- One traffic request per known zone plus one unknown-zone error
+
+### Portfolio-Scale Demo
+
+```bash
+feature-store-ops run-demo-workflow --preset portfolio
+```
+
+Portfolio preset scale:
+
+- 50 zones
+- 30 days
+- 2 events per zone per day
+- 3,000 synthetic events
+- 50 online feature rows
+- 120 deterministic simulated prediction requests
+
+You can also generate only the scaled synthetic data:
+
+```bash
+feature-store-ops generate-synthetic-events --preset portfolio
+feature-store-ops generate-synthetic-events --zones 10 --days 7 --events-per-zone-per-day 4
+```
+
+Generated data, model artifacts, logs, SQLite databases, and Redis dumps remain ignored by git. Tracked Markdown/JSON reports under `reports/` are kept for review.

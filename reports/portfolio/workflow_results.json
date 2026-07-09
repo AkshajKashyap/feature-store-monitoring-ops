@@ -1,5 +1,6 @@
 {
   "output_paths": {
+    "portfolio_scale_summary": "/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/portfolio_scale_summary.md",
     "portfolio_summary": "/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/portfolio_summary.md",
     "workflow_results": "/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/workflow_results.json",
     "workflow_summary": "/home/akshaj/Building/feature-store-monitoring-ops/reports/portfolio/workflow_summary.md"
@@ -20,8 +21,13 @@
     {
       "error_message": null,
       "metrics": {
+        "events_per_zone_per_day": null,
+        "num_days": null,
+        "preset": "default",
         "rows_written": 720,
-        "seed": 42
+        "seed": 42,
+        "user_count": 200,
+        "zone_count": 5
       },
       "name": "generate_synthetic_events",
       "output_paths": {
